@@ -9,6 +9,7 @@
 5. **User Experience First:** Every decision should prioritize user experience
 6. **Non-Interactive & CI-Aware:** Prefer non-interactive commands. Use `CI=true` for watch-mode tools (tests, linters) to ensure single execution.
 7. **Always Format:** Always run `pnpm format` after generating anything (code and even conductor plan alike).
+8. **Tests Location:** All test files must be located in a `__test__` directory within the same directory as the file being tested (e.g., `src/logic.ts` -> `src/__test__/logic.test.ts`).
 
 ## Task Workflow
 
@@ -110,12 +111,19 @@ All tasks follow a strict lifecycle:
 Before marking any task complete, verify:
 
 - [ ] All tests pass
+
 - [ ] Code coverage meets requirements (>80%)
+
 - [ ] Code follows project's code style guidelines
+
 - [ ] All public functions/methods are documented (e.g., docstrings, JSDoc)
+
 - [ ] Type safety is enforced (TypeScript types)
+
 - [ ] No linting or static analysis errors (using \`pnpm run lint\`)
+
 - [ ] Documentation updated if needed
+
 - [ ] No security vulnerabilities introduced
 
 ## Development Commands
@@ -159,15 +167,20 @@ pnpm run check
 
 ### Unit Testing
 
-- Every module must have corresponding tests using Vitest.
-- Use appropriate test setup/teardown mechanisms (\`beforeEach\`, \`afterEach\`).
+- Every module must have corresponding tests located in a `__test__` directory within the same path.
+
+- Use appropriate test setup/teardown mechanisms (`beforeEach`, `afterEach`).
+
 - Mock external dependencies (especially git operations).
+
 - Test both success and failure cases.
 
 ### Integration Testing
 
 - Test complete CLI flows using \`execa\` or mocked \`commander\` setups.
+
 - Verify branch deletion logic against a temporary git repository.
+
 - Test interactive prompts by mocking \`@clack/prompts\`.
 
 ## Commit Guidelines
@@ -185,14 +198,23 @@ pnpm run check
 ### Types
 
 - `feat`: New feature
+
 - `fix`: Bug fix
+
 - `docs`: Documentation only
+
 - `style`: Formatting, missing semicolons, etc.
+
 - `refactor`: Code change that neither fixes a bug nor adds a feature
+
 - `test`: Adding missing tests
+
 - `chore`: Maintenance tasks
+
 - `conductor(plan)`: Track planning updates
+
 - `conductor(checkpoint)`: Phase checkpoint commits
+
 - `conductor(setup)`: Project context initialization
 
 ### Examples

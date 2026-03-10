@@ -1,0 +1,46 @@
+{
+	"name": "git-clean-up",
+	"version": "0.1.0",
+	"description": "Interactive CLI tool to clean up local git branches",
+	"type": "module",
+	"bin": {
+		"git-clean-up": "./dist/index.js"
+	},
+	"scripts": {
+		"dev": "tsx src/index.ts",
+		"build": "tsup src/index.ts --format esm --clean --dts",
+		"install:global": "pnpm run build && pnpm link --global",
+		"uninstall:global": "pnpm remove -g git-clean-up",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"lint": "biome check --error-on-warnings .",
+		"format": "biome format . --write && pnpm run markdownlint --fix",
+		"markdownlint": "markdownlint . -d --ignore node_modules --ignore .git",
+		"check": "pnpm run lint && pnpm run markdownlint && tsc --noEmit",
+		"prepare": "pnpm run build"
+	},
+	"keywords": [
+		"git",
+		"cleanup",
+		"cli",
+		"interactive"
+	],
+	"author": "kurokeita",
+	"license": "GPL-3.0",
+	"dependencies": {
+		"@clack/prompts": "^0.9.1",
+		"commander": "^13.1.0",
+		"execa": "^9.5.2",
+		"picocolors": "^1.1.1"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.4.5",
+		"@types/node": "^22.13.8",
+		"@vitest/coverage-v8": "^4.0.18",
+		"markdownlint-cli": "^0.44.0",
+		"tsup": "^8.4.0",
+		"tsx": "^4.21.0",
+		"typescript": "^5.7.3",
+		"vitest": "^4.0.18"
+	}
+}
