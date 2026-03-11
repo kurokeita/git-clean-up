@@ -1,6 +1,6 @@
 {
 	"name": "@kurokeita/git-clean-up",
-	"version": "1.0.0",
+	"version": "1.1.0",
 	"description": "Interactive CLI tool to clean up local git branches",
 	"type": "module",
 	"bin": {
