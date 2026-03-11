@@ -1,6 +1,6 @@
 {
 	"name": "@kurokeita/git-clean-up",
-	"version": "0.1.0",
+	"version": "1.0.0",
 	"description": "Interactive CLI tool to clean up local git branches",
 	"type": "module",
 	"bin": {
@@ -17,7 +17,8 @@
 		"format": "biome format . --write && pnpm run markdownlint --fix",
 		"markdownlint": "markdownlint . -d --ignore node_modules --ignore .git",
 		"check": "pnpm run lint && pnpm run markdownlint && tsc --noEmit",
-		"prepare": "pnpm run build"
+		"prepare": "pnpm run build",
+		"release": "semantic-release"
 	},
 	"keywords": [
 		"git",
@@ -27,6 +28,7 @@
 	],
 	"author": "kurokeita",
 	"license": "GPL-3.0",
+	"packageManager": "pnpm@10.28.0",
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/kurokeita/git-clean-up.git"
@@ -39,9 +41,11 @@
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.5",
+		"@semantic-release/git": "^10.0.1",
 		"@types/node": "^22.13.8",
 		"@vitest/coverage-v8": "^4.0.18",
 		"markdownlint-cli": "^0.44.0",
+		"semantic-release": "^25.0.2",
 		"tsup": "^8.4.0",
 		"tsx": "^4.21.0",
 		"typescript": "^5.7.3",
