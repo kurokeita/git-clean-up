@@ -1,29 +1,62 @@
 import { describe, expect, it } from "vitest"
-import { createProgram } from "../cli"
+import { createCli } from "../cli"
 
 describe("CLI Command Parsing", () => {
-	it("should have default options", () => {
-		const program = createProgram()
-		program.parse([], { from: "user" })
-		const options = program.opts()
+	it("defaults to scan mode with audit-first options", () => {
+		const cli = createCli()
+		cli.program.parse([], { from: "user" })
 
-		expect(options.dryRun).toBe(false)
-		expect(options.target).toBe("main")
+		expect(cli.getParsedCommand()).toEqual({
+			mode: "scan",
+			options: {
+				ageDays: 30,
+				all: false,
+				apply: false,
+				include: ["branch", "stash", "worktree"],
+				json: false,
+				target: "main",
+			},
+		})
 	})
 
-	it("should parse --dry-run flag", () => {
-		const program = createProgram()
-		program.parse(["--dry-run"], { from: "user" })
-		const options = program.opts()
+	it("parses the scan command with include filters", () => {
+		const cli = createCli()
+		cli.program.parse(["scan", "--include", "branches,worktrees", "--json"], {
+			from: "user",
+		})
 
-		expect(options.dryRun).toBe(true)
+		expect(cli.getParsedCommand()).toEqual({
+			mode: "scan",
+			options: {
+				ageDays: 30,
+				all: false,
+				apply: false,
+				include: ["branch", "worktree"],
+				json: true,
+				target: "main",
+			},
+		})
 	})
 
-	it("should parse --target option", () => {
-		const program = createProgram()
-		program.parse(["--target", "develop"], { from: "user" })
-		const options = program.opts()
+	it("parses the clean command with apply mode", () => {
+		const cli = createCli()
+		cli.program.parse(
+			["clean", "--target", "develop", "--apply", "--age-days", "14"],
+			{
+				from: "user",
+			},
+		)
 
-		expect(options.target).toBe("develop")
+		expect(cli.getParsedCommand()).toEqual({
+			mode: "clean",
+			options: {
+				ageDays: 14,
+				all: false,
+				apply: true,
+				include: ["branch", "stash", "worktree"],
+				json: false,
+				target: "develop",
+			},
+		})
 	})
 })

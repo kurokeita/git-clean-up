@@ -1,19 +1,112 @@
 #!/usr/bin/env node
-import { execa } from "execa"
-import { isProtectedBranch } from "./branch-protection"
-import { createProgram } from "./cli"
+import type { CleanupFinding, ScanOptions } from "./cleanup.types"
+import { CleanupExecutor } from "./cleanup-executor"
+import { createCli } from "./cli"
 import { GitService } from "./git.service"
 import * as ui from "./ui"
 
-async function main() {
-	const program = createProgram()
-	program.parse()
-	const options = program.opts()
+async function collectFindings(
+	gitService: GitService,
+	options: ScanOptions,
+): Promise<CleanupFinding[]> {
+	const findings: CleanupFinding[] = []
 
-	await ui.showWelcome()
+	if (options.include.includes("branch")) {
+		findings.push(...(await gitService.getBranchFindings(options)))
+	}
+	if (options.include.includes("stash")) {
+		findings.push(...(await gitService.getStashFindings(options.ageDays)))
+	}
+	if (options.include.includes("worktree")) {
+		findings.push(...(await gitService.getWorktreeFindings(options)))
+	}
+
+	return findings
+}
+
+async function runInteractiveScanLoop(
+	gitService: GitService,
+	cleanupExecutor: CleanupExecutor,
+	options: ScanOptions,
+): Promise<void> {
+	for (;;) {
+		const findings = await collectFindings(gitService, options)
+		if (findings.length === 0) {
+			ui.showDone("Your workspace is already clean! 🎉")
+			return
+		}
+
+		const selectedCategory = await ui.selectFindingCategory(findings)
+		if (!selectedCategory) {
+			ui.showDone(`Scan found ${findings.length} cleanup opportunities.`)
+			return
+		}
+
+		const categoryFindings = findings.filter(
+			(finding) => finding.category === selectedCategory,
+		)
+		ui.showNote(categoryFindings.map(ui.formatFindingLabel).join("\n"))
+
+		const selectedFindings = await ui.selectFindings(
+			categoryFindings.filter((finding) => finding.fixable),
+		)
+		if (selectedFindings.length === 0) {
+			continue
+		}
+
+		const selectedAction = await ui.selectFindingAction(selectedFindings.length)
+		if (selectedAction === "back") {
+			continue
+		}
+		if (selectedAction === "exit") {
+			ui.showDone(`Scan found ${findings.length} cleanup opportunities.`)
+			return
+		}
+		if (selectedAction === "preview") {
+			const commands = cleanupExecutor.previewCommands(selectedFindings)
+			ui.showNote(
+				[
+					`Dry run: would apply ${selectedFindings.length} cleanup actions.`,
+					...commands,
+				].join("\n"),
+			)
+			continue
+		}
+
+		const confirmed = await ui.confirmDeletion(selectedFindings.length)
+		if (!confirmed) {
+			continue
+		}
+
+		const spinner = ui.createSpinner()
+		spinner.start("Applying cleanup actions...")
+		await cleanupExecutor.run(selectedFindings)
+		spinner.stop("Cleanup actions applied")
+	}
+}
+
+async function main() {
+	const cli = createCli()
+	cli.program.parse()
+	const parsedCommand = cli.getParsedCommand()
+
+	if (!parsedCommand) {
+		throw new Error("No command was parsed")
+	}
+
+	if (!parsedCommand.options.json) {
+		await ui.showWelcome()
+	}
 
 	const gitService = new GitService()
-	const s = ui.createSpinner()
+	const cleanupExecutor = new CleanupExecutor()
+	const s = parsedCommand.options.json
+		? {
+				message(_message: string) {},
+				start(_message: string) {},
+				stop(_message: string, _code?: number) {},
+			}
+		: ui.createSpinner()
 
 	s.start("Pruning remotes...")
 	try {
@@ -26,78 +119,64 @@ async function main() {
 	s.start("Scanning branches...")
 
 	try {
-		const [merged, gone, allLocal] = await Promise.all([
-			gitService.getMergedBranches(options.target),
-			gitService.getGoneBranches(),
-			gitService.getAllLocalBranches(),
-		])
-
-		const deletableBranches = new Set(allLocal)
-		const allCandidates = new Map<string, string[]>()
-
-		const addCandidate = (name: string, reason: string) => {
-			if (isProtectedBranch(name) || !deletableBranches.has(name)) return
-			const existing = allCandidates.get(name) || []
-			if (!existing.includes(reason)) {
-				allCandidates.set(name, [...existing, reason])
-			}
+		const scanOptions: ScanOptions = {
+			ageDays: parsedCommand.options.ageDays,
+			include: parsedCommand.options.include,
+			targetBranch: parsedCommand.options.target,
 		}
-		for (const b of merged) addCandidate(b, "merged")
-		for (const b of gone) addCandidate(b, "gone")
-
-		const potentialSquashed = allLocal.filter((b) => !allCandidates.has(b))
-		if (potentialSquashed.length > 0) {
-			s.message("Checking for squashed merges...")
-			const squashed = await gitService.identifySquashedBranches(
-				options.target,
-				potentialSquashed,
-			)
-			for (const b of squashed) addCandidate(b, "squashed")
-		}
-
+		const findings = await collectFindings(gitService, scanOptions)
 		s.stop("Scan complete")
 
-		const branchesToSelect = Array.from(allCandidates.entries()).map(
-			([name, reasons]) => ({
-				name,
-				reason: reasons.join(", "),
-			}),
-		)
-
-		if (branchesToSelect.length === 0) {
+		if (findings.length === 0) {
 			ui.showDone("Your workspace is already clean! 🎉")
 			return
 		}
 
-		const selectedBranches = options.all
-			? branchesToSelect.map((b) => b.name)
-			: await ui.selectBranches(branchesToSelect)
+		if (parsedCommand.options.json) {
+			console.log(ui.serializeFindings(findings))
+			return
+		}
 
-		if (selectedBranches.length === 0) {
+		if (parsedCommand.mode === "scan") {
+			await runInteractiveScanLoop(gitService, cleanupExecutor, scanOptions)
+			return
+		}
+
+		const selectedFindings = parsedCommand.options.all
+			? findings.filter((finding) => finding.fixable)
+			: await ui.selectFindings(findings.filter((finding) => finding.fixable))
+
+		if (selectedFindings.length === 0) {
 			ui.showCancel("Cleanup cancelled")
 			return
 		}
 
-		if (options.dryRun) {
+		if (!parsedCommand.options.apply) {
+			const commands = cleanupExecutor.previewCommands(selectedFindings)
 			ui.showDone(
-				`Dry run: would have deleted ${selectedBranches.length} branches: ${selectedBranches.join(", ")}`,
+				[
+					`Dry run: would apply ${selectedFindings.length} cleanup actions.`,
+					...commands,
+				].join("\n"),
 			)
 			return
 		}
 
 		const confirmed =
-			options.all || (await ui.confirmDeletion(selectedBranches.length))
+			parsedCommand.options.all ||
+			(await ui.confirmDeletion(selectedFindings.length))
 		if (!confirmed) {
 			ui.showCancel("Cleanup cancelled")
 			return
 		}
-		s.start("Deleting branches...")
-		for (const branch of selectedBranches) {
-			await execa("git", ["branch", "-D", branch])
-		}
-		s.stop("Branches deleted")
 
-		ui.showDone(`Successfully cleaned up ${selectedBranches.length} branches!`)
+		s.start("Applying cleanup actions...")
+		await cleanupExecutor.run(selectedFindings)
+		s.stop("Cleanup actions applied")
+
+		ui.showDone(
+			`Successfully applied ${selectedFindings.length} cleanup actions!`,
+		)
 	} catch (error) {
 		s.stop("Error during cleanup", 1)
 		if (error instanceof Error) {

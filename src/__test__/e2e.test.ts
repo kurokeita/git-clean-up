@@ -5,10 +5,20 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest"
 
 describe("E2E", () => {
 	const testRepoPath = path.join(process.cwd(), "test-repo-e2e")
-	const binPath = path.join(process.cwd(), "dist/index.js")
+	const worktreePath = path.join(process.cwd(), "test-repo-e2e-worktree")
+	const entryPath = path.join(process.cwd(), "dist/index.js")
+
+	const runCli = async (...args: string[]) =>
+		execa("node", [entryPath, ...args], {
+			cwd: testRepoPath,
+			env: { ...process.env, CI: "true" },
+		})
 
 	beforeAll(async () => {
-		// Setup a real git repo for testing
+		await execa("pnpm", ["run", "build"], {
+			cwd: process.cwd(),
+		})
+
 		await fs.mkdir(testRepoPath, { recursive: true })
 		const git = async (...args: string[]) =>
 			execa("git", args, { cwd: testRepoPath })
@@ -21,34 +31,67 @@ describe("E2E", () => {
 		await git("add", ".")
 		await git("commit", "-m", "initial commit")
 
-		// Create a merged branch
 		await git("checkout", "-b", "merged-branch")
 		await git("checkout", "main")
 		await git("merge", "merged-branch")
 
-		// Create an unmerged branch
+		await git("checkout", "-b", "cleanup-branch")
+		await git("checkout", "main")
+		await git("merge", "cleanup-branch")
+
 		await git("checkout", "-b", "unmerged-branch")
 		await fs.writeFile(path.join(testRepoPath, "other.txt"), "world")
 		await git("add", ".")
 		await git("commit", "-m", "unmerged work")
+		await git("stash", "push", "-m", "shared message")
+		await fs.writeFile(path.join(testRepoPath, "other.txt"), "world-again")
+		await git("stash", "push", "-m", "shared message")
 		await git("checkout", "main")
+
+		await git("worktree", "add", worktreePath, "merged-branch")
+		await fs.rm(worktreePath, { recursive: true, force: true })
 	})
 
 	afterAll(async () => {
 		await fs.rm(testRepoPath, { recursive: true, force: true })
+		await fs.rm(worktreePath, { recursive: true, force: true })
 	})
 
-	it("should detect merged branches in dry-run mode", async () => {
+	it("returns grouped findings in json scan mode", async () => {
+		const { stdout } = await runCli(
+			"scan",
+			"--json",
+			"--include",
+			"branches,stashes,worktrees",
+			"--age-days",
+			"0",
+		)
+
+		expect(stdout).toContain('"category": "branch"')
+		expect(stdout).toContain('"category": "stash"')
+		expect(stdout).toContain('"category": "worktree"')
+		expect(stdout).toContain("merged-branch")
+		expect(stdout).toContain(worktreePath)
+	})
+
+	it("previews cleanup actions in clean mode without apply", async () => {
+		const { stdout } = await runCli("clean", "--include", "branches", "--all")
+
+		expect(stdout).toContain("Dry run")
+		expect(stdout).toContain("git branch -D cleanup-branch")
+	})
+
+	it("applies cleanup actions when apply is enabled", async () => {
+		await runCli("clean", "--include", "branches", "--all", "--apply")
+
 		const { stdout } = await execa(
-			"node",
-			[binPath, "--dry-run", "--all", "--target", "main"],
+			"git",
+			["branch", "--list", "cleanup-branch"],
 			{
 				cwd: testRepoPath,
-				env: { ...process.env, CI: "true" },
 			},
 		)
 
-		expect(stdout).toContain("merged-branch")
-		expect(stdout).toContain("Dry run")
+		expect(stdout.trim()).toBe("")
 	})
 })
