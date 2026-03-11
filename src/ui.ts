@@ -1,6 +1,7 @@
 import * as p from "@clack/prompts"
 import color from "picocolors"
 import type { CleanupCategory, CleanupFinding } from "./cleanup.types"
+import { APP_NAME, getVersion } from "./version"
 
 export interface GroupedFindings {
 	branch: CleanupFinding[]
@@ -8,8 +9,16 @@ export interface GroupedFindings {
 	worktree: CleanupFinding[]
 }
 
+export function formatVersionBanner() {
+	return color.bgCyan(color.black(` ${APP_NAME} v${getVersion()} `))
+}
+
+function withVersionHeader(message: string): string {
+	return `${formatVersionBanner()}\n${message}`
+}
+
 export async function showWelcome() {
-	p.intro(color.bgCyan(color.black(" git-clean-up ")))
+	p.intro(formatVersionBanner())
 }
 
 export async function showDone(message: string) {
@@ -76,7 +85,7 @@ export async function selectFindingCategory(
 	}
 
 	const selectedCategory = await p.select({
-		message: "Choose a category to review",
+		message: withVersionHeader("Choose a category to review"),
 		options: [
 			...options,
 			{
@@ -115,7 +124,7 @@ export async function selectFindings(
 	}
 
 	const selected = await p.multiselect({
-		message: "Select findings to clean",
+		message: withVersionHeader("Select findings to clean"),
 		options: findings.map((finding) => ({
 			label: formatFindingLabel(finding),
 			value: finding.id,
@@ -135,7 +144,9 @@ export async function selectFindingAction(
 	count: number,
 ): Promise<"preview" | "apply" | "back" | "exit"> {
 	const selectedAction = await p.select({
-		message: `Choose what to do with ${count} selected findings`,
+		message: withVersionHeader(
+			`Choose what to do with ${count} selected findings`,
+		),
 		options: [
 			{
 				label: "Preview cleanup",
@@ -169,7 +180,9 @@ export function showNote(message: string) {
 
 export async function confirmDeletion(count: number): Promise<boolean> {
 	const confirmed = await p.confirm({
-		message: `Are you sure you want to apply ${count} cleanup actions?`,
+		message: withVersionHeader(
+			`Are you sure you want to apply ${count} cleanup actions?`,
+		),
 		initialValue: false,
 	})
 
