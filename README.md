@@ -1,48 +1,66 @@
 # git-clean-up 🧹
 
-A modern, interactive CLI tool to help you keep your local git workspace clean by identifying and removing stale or merged branches.
+An audit-first CLI tool for cleaning local git repository hygiene. It scans for stale branches, forgotten stashes, and suspicious worktrees, then lets you selectively clean them with explicit confirmation.
 
 ## Features
 
-- **Interactive Selection**: Choose exactly which branches to delete using a beautiful CLI interface.
-- **Automatic Pruning**: Always synchronizes with your remotes (`git fetch --prune`) before scanning.
-- **Merged Branch Detection**: Identifies branches already merged into your target branch (e.g., `main`).
-- **"Gone" Branch Detection**: Finds local branches whose remote counterparts have been deleted.
-- **Squash-Merge Support**: Correctily identifies branches merged via "Squash" strategy (common in GitHub/Azure DevOps PRs).
+- **Audit-First Workflow**: `scan` inspects repository hygiene without mutating anything, and `clean` previews changes unless `--apply` is explicitly set.
+- **Grouped Findings**: Results are organized by branches, stashes, and worktrees with per-item reasons and risk hints.
+- **Branch Hygiene Detection**:
+  - merged branches
+  - branches whose upstream is gone
+  - branches with no upstream
+  - significantly diverged branches
+  - squash-merged branches
+- **Stash Hygiene Detection**:
+  - old stashes
+  - stale WIP stashes
+  - duplicate-message stashes
+- **Worktree Hygiene Detection**:
+  - missing-path worktrees
+  - detached-head worktrees
+  - protected-branch worktrees
+  - worktrees pointing at stale branches
 - **Safety First**:
-  - Protected branches (`main`, `master`, `develop`, `dev`) are never listed for deletion.
-  - Current branch and branches used in other worktrees are automatically excluded.
-  - Explicit confirmation before any deletion.
-  - Dry-run mode to preview changes.
+  - Protected branches (`main`, `master`, `develop`, `dev`) are not surfaced as branch cleanup candidates.
+  - Branches active in other worktrees are excluded from branch deletion candidates.
+  - `clean` is a preview by default.
+  - Explicit confirmation is required before applying cleanup actions unless `--all` is used.
 
 ## Installation
 
 You can run it directly without installation:
 
 ```bash
-pnpx git-clean-up
+pnpx @kurokeita/git-clean-up
 ```
 
 Or install it globally to your system:
 
 ```bash
-pnpm run install:global
+pnpm install -g @kurokeita/git-clean-up
 ```
 
 ## Usage
 
 ```bash
-# Start interactive cleanup
+# Start an interactive repository scan
 git-clean-up
 
-# Preview which branches would be deleted
-git-clean-up --dry-run
+# Audit all hygiene categories and return JSON
+git-clean-up scan --json
 
-# Specify a different target branch for merge detection (default is 'main')
-git-clean-up --target develop
+# Focus on branch and worktree findings only
+git-clean-up scan --include branches,worktrees
 
-# Select all found branches without interaction (useful for scripts)
-git-clean-up --all
+# Preview cleanup actions without mutating the repo
+git-clean-up clean --include branches --all
+
+# Apply the selected cleanup actions
+git-clean-up clean --include branches,stashes --apply
+
+# Use a different merge target and age threshold
+git-clean-up scan --target develop --age-days 14
 ```
 
 ## Development
@@ -57,4 +75,4 @@ pnpm run build    # Build for production
 
 ## License
 
-MIT
+GPL-3.0
