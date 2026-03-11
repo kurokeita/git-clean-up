@@ -1,7 +1,7 @@
 import * as p from "@clack/prompts"
 import color from "picocolors"
 import type { CleanupCategory, CleanupFinding } from "./cleanup.types"
-import { APP_NAME, getVersion } from "./version"
+import { APP_NAME, getVersion, type UpdateInfo } from "./version"
 
 export interface GroupedFindings {
 	branch: CleanupFinding[]
@@ -19,6 +19,23 @@ function withVersionHeader(message: string): string {
 
 export async function showWelcome() {
 	p.intro(formatVersionBanner())
+}
+
+export async function promptForUpdate(
+	updateInfo: UpdateInfo,
+): Promise<boolean> {
+	const confirmed = await p.confirm({
+		initialValue: true,
+		message: withVersionHeader(
+			`A new version is available (${updateInfo.currentVersion} -> ${updateInfo.latestVersion}). Update now?`,
+		),
+	})
+
+	if (p.isCancel(confirmed)) {
+		return false
+	}
+
+	return confirmed as boolean
 }
 
 export async function showDone(message: string) {
