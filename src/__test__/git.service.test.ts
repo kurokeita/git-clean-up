@@ -170,13 +170,15 @@ describe(GitService.name, () => {
 		it("returns old, duplicate-message, and stale WIP stashes", async () => {
 			const oldTimestamp = Math.floor(Date.now() / 1000) - 60 * 60 * 24 * 45
 			const freshTimestamp = Math.floor(Date.now() / 1000) - 60 * 60 * 24 * 2
+			const oldMessage = "WIP on main: old work"
+			const duplicateMessage = "On feature/demo: shared message"
 
 			vi.mocked(execa).mockResolvedValue(
 				mockResult(
 					[
-						`stash@{0}|${oldTimestamp}|WIP on main: old work`,
-						`stash@{1}|${freshTimestamp}|shared message`,
-						`stash@{2}|${freshTimestamp}|shared message`,
+						`stash@{0}|${oldTimestamp}|${oldMessage}`,
+						`stash@{1}|${freshTimestamp}|${duplicateMessage}`,
+						`stash@{2}|${freshTimestamp}|${duplicateMessage}`,
 					].join("\n"),
 				),
 			)
@@ -189,6 +191,18 @@ describe(GitService.name, () => {
 					"stash:stash@{0}:stale-wip",
 					"stash:stash@{1}:duplicate-message",
 					"stash:stash@{2}:duplicate-message",
+				]),
+			)
+			expect(findings).toEqual(
+				expect.arrayContaining([
+					expect.objectContaining({
+						id: "stash:stash@{0}:old",
+						title: `stash@{0}: ${oldMessage}`,
+					}),
+					expect.objectContaining({
+						id: "stash:stash@{1}:duplicate-message",
+						title: `stash@{1}: ${duplicateMessage}`,
+					}),
 				]),
 			)
 		})
