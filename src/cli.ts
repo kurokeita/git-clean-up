@@ -1,5 +1,6 @@
 import { Command } from "commander"
 import type { CleanupCategory } from "./cleanup.types"
+import { APP_NAME, getVersion } from "./version"
 
 export interface CliOptions {
 	target: string
@@ -96,11 +97,11 @@ export function createCli() {
 
 	addSharedOptions(
 		program
-			.name("git-clean-up")
+			.name(APP_NAME)
 			.description(
 				"Audit-first CLI tool to clean up local git repository hygiene",
 			)
-			.version("0.1.0")
+			.version(getVersion(), "-v, --version")
 			.argument("[mode]", "scan or clean", "scan")
 			.option("--apply", "Apply the selected cleanup actions", false),
 	).action((mode: string, options) => {

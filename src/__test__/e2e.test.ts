@@ -2,6 +2,7 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import { execa } from "execa"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import packageJson from "../../package.json"
 
 describe("E2E", () => {
 	const testRepoPath = path.join(process.cwd(), "test-repo-e2e")
@@ -72,6 +73,15 @@ describe("E2E", () => {
 		expect(stdout).toContain('"category": "worktree"')
 		expect(stdout).toContain("merged-branch")
 		expect(stdout).toContain(worktreePath)
+		expect(() => JSON.parse(stdout)).not.toThrow()
+	})
+
+	it("prints the package version for both version flags", async () => {
+		const longFlag = await runCli("--version")
+		const shortFlag = await runCli("-v")
+
+		expect(longFlag.stdout.trim()).toBe(packageJson.version)
+		expect(shortFlag.stdout.trim()).toBe(packageJson.version)
 	})
 
 	it("previews cleanup actions in clean mode without apply", async () => {
