@@ -1,9 +1,11 @@
 #!/usr/bin/env node
+import { pathToFileURL } from "node:url"
 import type { CleanupFinding, ScanOptions } from "./cleanup.types"
 import { CleanupExecutor } from "./cleanup-executor"
 import { createCli } from "./cli"
 import { GitService } from "./git.service"
 import * as ui from "./ui"
+import { APP_NAME, checkForUpdates, installUpdate } from "./version"
 
 async function collectFindings(
 	gitService: GitService,
@@ -85,7 +87,7 @@ async function runInteractiveScanLoop(
 	}
 }
 
-async function main() {
+export async function runApp() {
 	const cli = createCli()
 	cli.program.parse()
 	const parsedCommand = cli.getParsedCommand()
@@ -95,6 +97,31 @@ async function main() {
 	}
 
 	if (!parsedCommand.options.json) {
+		const updateInfo = await checkForUpdates()
+
+		if (updateInfo) {
+			const shouldUpdate = await ui.promptForUpdate(updateInfo)
+
+			if (shouldUpdate) {
+				const updateSpinner = ui.createSpinner()
+				updateSpinner.start(`Updating ${APP_NAME}...`)
+
+				try {
+					await installUpdate()
+					updateSpinner.stop(`${APP_NAME} updated`)
+					ui.showDone(
+						`Updated ${APP_NAME} to v${updateInfo.latestVersion}. Run ${APP_NAME} again to continue.`,
+					)
+					return
+				} catch {
+					updateSpinner.stop("Update failed", 1)
+					ui.showCancel(
+						`Automatic update failed. Run pnpm install -g @kurokeita/git-clean-up@latest manually.`,
+					)
+				}
+			}
+		}
+
 		await ui.showWelcome()
 	}
 
@@ -188,7 +215,12 @@ async function main() {
 	}
 }
 
-main().catch((err) => {
-	console.error(err)
-	process.exit(1)
-})
+if (
+	process.argv[1] &&
+	import.meta.url === pathToFileURL(process.argv[1]).href
+) {
+	runApp().catch((err) => {
+		console.error(err)
+		process.exit(1)
+	})
+}

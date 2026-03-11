@@ -33,6 +33,7 @@ import {
 	formatVersionBanner,
 	getCategoryOptions,
 	groupFindingsByCategory,
+	promptForUpdate,
 	serializeFindings,
 	showWelcome,
 } from "../ui"
@@ -117,5 +118,19 @@ describe("ui helpers", () => {
 		expect(promptsMock.intro).toHaveBeenCalledTimes(1)
 		expect(promptsMock.intro.mock.calls[0]?.[0]).toContain("git-clean-up")
 		expect(promptsMock.intro.mock.calls[0]?.[0]).toContain("v")
+	})
+
+	it("prompts with the current and latest versions before updating", async () => {
+		promptsMock.confirm.mockResolvedValue(true)
+
+		const accepted = await promptForUpdate({
+			currentVersion: "1.2.1",
+			latestVersion: "1.3.0",
+		})
+
+		expect(accepted).toBe(true)
+		expect(promptsMock.confirm).toHaveBeenCalledTimes(1)
+		expect(promptsMock.confirm.mock.calls[0]?.[0].message).toContain("1.2.1")
+		expect(promptsMock.confirm.mock.calls[0]?.[0].message).toContain("1.3.0")
 	})
 })
