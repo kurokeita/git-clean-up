@@ -190,8 +190,10 @@ export class GitService {
 				continue
 			}
 
-			const [reference, timestampRaw, message] = line.split("|")
+			const [reference, timestampRaw, ...messageParts] = line.split("|")
+			const message = messageParts.join("|")
 			const timestamp = Number(timestampRaw)
+			const title = message === "" ? reference : `${reference}: ${message}`
 
 			if (!messages.has(message)) {
 				messages.set(message, [])
@@ -209,7 +211,7 @@ export class GitService {
 					id: `stash:${reference}:old`,
 					reason: `Older than ${ageDays} days`,
 					risk: "medium",
-					title: reference,
+					title,
 				})
 			}
 
@@ -224,7 +226,7 @@ export class GitService {
 					id: `stash:${reference}:stale-wip`,
 					reason: `Stale WIP stash older than ${ageDays} days`,
 					risk: "medium",
-					title: reference,
+					title,
 				})
 			}
 		}
@@ -244,7 +246,7 @@ export class GitService {
 					id: `stash:${reference}:duplicate-message`,
 					reason: `Duplicate stash message: ${message}`,
 					risk: "low",
-					title: reference,
+					title: message === "" ? reference : `${reference}: ${message}`,
 				})
 			}
 		}
