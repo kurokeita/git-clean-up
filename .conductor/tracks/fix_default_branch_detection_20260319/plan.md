@@ -10,13 +10,13 @@
 
 ## Phase 2: Implementation
 
-- [ ] Task: Implement `getDefaultBranch` in `GitService`.
-  - [ ] [Sub-task]: Use `git symbolic-ref refs/remotes/origin/HEAD` as the primary indicator.
-  - [ ] [Sub-task]: Fall back to checking existence of `main`, then `master`.
-  - [ ] [Sub-task]: Return the current branch if all others are missing.
-- [ ] Task: Update CLI to use detected default branch.
-  - [ ] [Sub-task]: Update `runApp` in `src/index.ts` to call `getDefaultBranch` if no target is specified.
-- [ ] Task: Manual Verification — 'Phase 2 Implementation'
+- [x] Task: Implement `getDefaultBranch` in `GitService`. 764614c
+  - [x] [Sub-task]: Use `git symbolic-ref refs/remotes/origin/HEAD` as the primary indicator.
+  - [x] [Sub-task]: Fall back to checking existence of `main`, then `master`.
+  - [x] [Sub-task]: Return the current branch if all others are missing.
+- [x] Task: Update CLI to use detected default branch. 764614c
+  - [x] [Sub-task]: Update `runApp` in `src/index.ts` to call `getDefaultBranch` if no target is specified.
+- [x] Task: Manual Verification — 'Phase 2 Implementation'
 
 ## Phase 3: Verification and Finalization
 
