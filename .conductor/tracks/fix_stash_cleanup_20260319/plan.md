@@ -23,7 +23,7 @@
   - [x] [Sub-task]: Prevent already-deleted stash findings from being shown again in the next review step.
 - [x] Task: Manual Verification — 'Phase 2 Implementation'
 
-## Phase 3: Verification and Finalization
+## Phase 3: Verification and Finalization [checkpoint: 645e618]
 
 - [x] Task: Run all tests and ensure they pass.
   - [x] [Sub-task]: `CI=true pnpm test`
