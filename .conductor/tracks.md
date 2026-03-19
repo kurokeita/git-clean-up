@@ -13,5 +13,5 @@ Each track has its own detailed plan in its respective folder.
 
 ---
 
-- [~] **Track: Automatic Default Branch Detection**
+- [x] **Track: Automatic Default Branch Detection**
   *Link: [./tracks/fix_default_branch_detection_20260319/](./tracks/fix_default_branch_detection_20260319/)*
