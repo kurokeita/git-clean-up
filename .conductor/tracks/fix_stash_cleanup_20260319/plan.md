@@ -1,20 +1,20 @@
 # Implementation Plan: Fix Interactive Stash Cleanup Execution
 
-## Phase 1: Preparation and Failing Tests
+## Phase 1: Preparation and Failing Tests [checkpoint: 155274a]
 
 - [x] Task: Add a failing integration test for interactive stash cleanup. bb8f543
   - [x] [Sub-task]: Extend `src/__test__/e2e.test.ts` or add a dedicated interactive cleanup test file.
   - [x] [Sub-task]: Create a temporary git repository with multiple stash entries.
   - [x] [Sub-task]: Exercise the cleanup path that applies stash deletions and assert that `git stash list` shrinks afterward.
-- [~] Task: Add a failing unit test for stash cleanup action execution.
-  - [ ] [Sub-task]: Inspect `CleanupExecutor` stash action handling in `src/__test__/cleanup-executor.test.ts`.
-  - [ ] [Sub-task]: Assert that the exact selected stash references are passed to `git stash drop`.
-  - [ ] [Sub-task]: Cover the case where selected stashes are reported as applied but remain present.
-- [ ] Task: Manual Verification — 'Phase 1 Preparation'
+- [x] Task: Add a failing unit test for stash cleanup action execution. f762681
+  - [x] [Sub-task]: Inspect `CleanupExecutor` stash action handling in `src/__test__/cleanup-executor.test.ts`.
+  - [x] [Sub-task]: Assert that the exact selected stash references are passed to `git stash drop`.
+  - [x] [Sub-task]: Cover the case where selected stashes are reported as applied but remain present.
+- [x] Task: Manual Verification — 'Phase 1 Preparation'
 
 ## Phase 2: Implementation
 
-- [ ] Task: Fix stash cleanup execution in the runtime action path.
+- [~] Task: Fix stash cleanup execution in the runtime action path.
   - [ ] [Sub-task]: Trace how selected stash findings are converted into cleanup actions during interactive execution.
   - [ ] [Sub-task]: Correct the stash target passed to `git stash drop` or the ordering/state handling if it is mutating incorrectly at runtime.
   - [ ] [Sub-task]: Ensure the executor reports failure when a stash drop does not actually succeed.
