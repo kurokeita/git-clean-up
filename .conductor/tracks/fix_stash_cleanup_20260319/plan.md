@@ -14,23 +14,23 @@
 
 ## Phase 2: Implementation
 
-- [~] Task: Fix stash cleanup execution in the runtime action path.
-  - [ ] [Sub-task]: Trace how selected stash findings are converted into cleanup actions during interactive execution.
-  - [ ] [Sub-task]: Correct the stash target passed to `git stash drop` or the ordering/state handling if it is mutating incorrectly at runtime.
-  - [ ] [Sub-task]: Ensure the executor reports failure when a stash drop does not actually succeed.
-- [ ] Task: Refresh interactive results after stash cleanup.
-  - [ ] [Sub-task]: Verify the scan loop re-reads repository state after applying stash cleanup actions.
-  - [ ] [Sub-task]: Prevent already-deleted stash findings from being shown again in the next review step.
-- [ ] Task: Manual Verification — 'Phase 2 Implementation'
+- [x] Task: Fix stash cleanup execution in the runtime action path. bb8f543
+  - [x] [Sub-task]: Trace how selected stash findings are converted into cleanup actions during interactive execution.
+  - [x] [Sub-task]: Correct the stash target passed to `git stash drop` or the ordering/state handling if it is mutating incorrectly at runtime.
+  - [x] [Sub-task]: Ensure the executor reports failure when a stash drop does not actually succeed.
+- [x] Task: Refresh interactive results after stash cleanup. be7044e
+  - [x] [Sub-task]: Verify the scan loop re-reads repository state after applying stash cleanup actions.
+  - [x] [Sub-task]: Prevent already-deleted stash findings from being shown again in the next review step.
+- [x] Task: Manual Verification — 'Phase 2 Implementation'
 
 ## Phase 3: Verification and Finalization
 
-- [ ] Task: Run all tests and ensure they pass.
-  - [ ] [Sub-task]: `CI=true pnpm test`
-  - [ ] [Sub-task]: `pnpm run lint`
-  - [ ] [Sub-task]: `pnpm exec tsc --noEmit`
-- [ ] Task: Verify with the interactive terminal UI in a real git repository.
-  - [ ] [Sub-task]: Reproduce the stash-only interactive flow shown in the screenshot.
-  - [ ] [Sub-task]: Confirm selected stashes are gone from `git stash list` after applying cleanup.
-  - [ ] [Sub-task]: Confirm the follow-up screen no longer reports the deleted stash findings.
-- [ ] Task: Manual Verification — 'Phase 3 Verification'
+- [x] Task: Run all tests and ensure they pass.
+  - [x] [Sub-task]: `CI=true pnpm test`
+  - [x] [Sub-task]: `pnpm run lint`
+  - [x] [Sub-task]: `pnpm exec tsc --noEmit`
+- [x] Task: Verify with the interactive terminal UI in a real git repository.
+  - [x] [Sub-task]: Reproduce the stash-only interactive flow shown in the screenshot.
+  - [x] [Sub-task]: Confirm selected stashes are gone from `git stash list` after applying cleanup.
+  - [x] [Sub-task]: Confirm the follow-up screen no longer reports the deleted stash findings.
+- [x] Task: Manual Verification — 'Phase 3 Verification'

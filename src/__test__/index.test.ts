@@ -198,6 +198,8 @@ describe("runApp", () => {
 
 		expect(gitServiceMock.getStashFindings).toHaveBeenCalledTimes(3)
 		expect(cleanupExecutorMock.run).toHaveBeenCalledWith([stashFinding])
-		expect(uiMock.showDone).toHaveBeenCalledWith("Your workspace is already clean! 🎉")
+		expect(uiMock.showDone).toHaveBeenCalledWith(
+			"Your workspace is already clean! 🎉",
+		)
 	})
 })
