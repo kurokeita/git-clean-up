@@ -8,7 +8,7 @@ Each track has its own detailed plan in its respective folder.
 
 ---
 
-- [ ] **Track: Fix Stash Cleanup Index Shifting**
+- [~] **Track: Fix Stash Cleanup Index Shifting**
   *Link: [./tracks/fix_stash_cleanup_20260319/](./tracks/fix_stash_cleanup_20260319/)*
 
 ---
