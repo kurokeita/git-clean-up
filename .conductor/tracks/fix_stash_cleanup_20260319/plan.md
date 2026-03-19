@@ -2,11 +2,11 @@
 
 ## Phase 1: Preparation and Failing Tests
 
-- [ ] Task: Add a failing integration test for interactive stash cleanup.
-  - [ ] [Sub-task]: Extend `src/__test__/e2e.test.ts` or add a dedicated interactive cleanup test file.
-  - [ ] [Sub-task]: Create a temporary git repository with multiple stash entries.
-  - [ ] [Sub-task]: Exercise the cleanup path that applies stash deletions and assert that `git stash list` shrinks afterward.
-- [ ] Task: Add a failing unit test for stash cleanup action execution.
+- [x] Task: Add a failing integration test for interactive stash cleanup. bb8f543
+  - [x] [Sub-task]: Extend `src/__test__/e2e.test.ts` or add a dedicated interactive cleanup test file.
+  - [x] [Sub-task]: Create a temporary git repository with multiple stash entries.
+  - [x] [Sub-task]: Exercise the cleanup path that applies stash deletions and assert that `git stash list` shrinks afterward.
+- [~] Task: Add a failing unit test for stash cleanup action execution.
   - [ ] [Sub-task]: Inspect `CleanupExecutor` stash action handling in `src/__test__/cleanup-executor.test.ts`.
   - [ ] [Sub-task]: Assert that the exact selected stash references are passed to `git stash drop`.
   - [ ] [Sub-task]: Cover the case where selected stashes are reported as applied but remain present.
