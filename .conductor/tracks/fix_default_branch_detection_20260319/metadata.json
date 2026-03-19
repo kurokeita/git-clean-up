@@ -1,0 +1,8 @@
+{
+	"track_id": "fix_default_branch_detection_20260319",
+	"type": "bug",
+	"status": "new",
+	"created_at": "2026-03-19T10:15:00Z",
+	"updated_at": "2026-03-19T10:20:00Z",
+	"description": "CLI tool crashes when 'main' branch doesn't exist locally, because it's hardcoded as the default target branch."
+}
