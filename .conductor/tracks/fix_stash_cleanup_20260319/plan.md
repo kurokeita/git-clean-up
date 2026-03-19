@@ -12,7 +12,7 @@
   - [x] [Sub-task]: Cover the case where selected stashes are reported as applied but remain present.
 - [x] Task: Manual Verification — 'Phase 1 Preparation'
 
-## Phase 2: Implementation
+## Phase 2: Implementation [checkpoint: 66755a0]
 
 - [x] Task: Fix stash cleanup execution in the runtime action path. bb8f543
   - [x] [Sub-task]: Trace how selected stash findings are converted into cleanup actions during interactive execution.
