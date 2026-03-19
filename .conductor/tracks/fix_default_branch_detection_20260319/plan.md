@@ -6,7 +6,7 @@
   - [x] [Sub-task]: Add test file `src/__test__/git.service.default-branch.test.ts`.
   - [x] [Sub-task]: Mock various git repository states (no remote, main exists, only master exists).
   - [x] [Sub-task]: Assert that `getDefaultBranch` returns the expected branch name.
-- [ ] Task: Manual Verification — 'Phase 1 Preparation'
+- [x] Task: Manual Verification — 'Phase 1 Preparation'
 
 ## Phase 2: Implementation [checkpoint: f42f9e6]
 
@@ -18,8 +18,8 @@
   - [x] [Sub-task]: Update `runApp` in `src/index.ts` to call `getDefaultBranch` if no target is specified.
 - [x] Task: Manual Verification — 'Phase 2 Implementation'
 
-## Phase 3: Verification and Finalization
+## Phase 3: Verification and Finalization [checkpoint: 7d09f14]
 
-- [~] Task: Run all tests and ensure they pass.
+- [x] Task: Run all tests and ensure they pass.
   - [x] [Sub-task]: `pnpm test`
-- [ ] Task: Manual Verification — 'Phase 3 Verification'
+- [x] Task: Manual Verification — 'Phase 3 Verification'
