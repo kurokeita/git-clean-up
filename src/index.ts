@@ -146,10 +146,12 @@ export async function runApp() {
 	s.start("Scanning branches...")
 
 	try {
+		const targetBranch =
+			parsedCommand.options.target ?? (await gitService.getDefaultBranch())
 		const scanOptions: ScanOptions = {
 			ageDays: parsedCommand.options.ageDays,
 			include: parsedCommand.options.include,
-			targetBranch: parsedCommand.options.target,
+			targetBranch,
 		}
 		const findings = await collectFindings(gitService, scanOptions)
 		s.stop("Scan complete")

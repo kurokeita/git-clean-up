@@ -55,4 +55,50 @@ describe(CleanupExecutor.name, () => {
 			"git stash drop stash@{0}",
 		])
 	})
+
+	it("sorts stash cleanup actions by index in descending order in run()", async () => {
+		await executor.run([
+			{
+				...finding("stash:stash@{0}:old"),
+				category: "stash",
+				cleanupAction: { target: "stash@{0}", type: "drop-stash" },
+			},
+			{
+				...finding("stash:stash@{2}:old"),
+				category: "stash",
+				cleanupAction: { target: "stash@{2}", type: "drop-stash" },
+			},
+			{
+				...finding("stash:stash@{1}:old"),
+				category: "stash",
+				cleanupAction: { target: "stash@{1}", type: "drop-stash" },
+			},
+		])
+
+		expect(vi.mocked(execa)).toHaveBeenCalledTimes(3)
+		const calls = vi.mocked(execa).mock.calls
+		expect(calls[0][1]).toContain("stash@{2}")
+		expect(calls[1][1]).toContain("stash@{1}")
+		expect(calls[2][1]).toContain("stash@{0}")
+	})
+
+	it("sorts stash cleanup actions by index in descending order in previewCommands()", () => {
+		const commands = executor.previewCommands([
+			{
+				...finding("stash:stash@{0}:old"),
+				category: "stash",
+				cleanupAction: { target: "stash@{0}", type: "drop-stash" },
+			},
+			{
+				...finding("stash:stash@{1}:old"),
+				category: "stash",
+				cleanupAction: { target: "stash@{1}", type: "drop-stash" },
+			},
+		])
+
+		expect(commands).toEqual([
+			"git stash drop stash@{1}",
+			"git stash drop stash@{0}",
+		])
+	})
 })

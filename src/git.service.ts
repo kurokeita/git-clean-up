@@ -11,6 +11,33 @@ interface WorktreeInfo {
 
 export class GitService {
 	/**
+	 * Detects the repository's default branch.
+	 */
+	async getDefaultBranch(): Promise<string> {
+		try {
+			const { stdout } = await execa("git", [
+				"symbolic-ref",
+				"refs/remotes/origin/HEAD",
+			])
+			const remoteHead = stdout.trim().match(/^refs\/remotes\/(.+)$/)
+			if (remoteHead?.[1]) {
+				return remoteHead[1]
+			}
+		} catch (_error) {
+			// Fall through to local branch detection.
+		}
+
+		for (const branch of ["main", "master"]) {
+			if (await this.branchExists(branch)) {
+				return branch
+			}
+		}
+
+		const { stdout } = await execa("git", ["branch", "--show-current"])
+		return stdout.trim()
+	}
+
+	/**
 	 * Fetches and prunes remotes.
 	 */
 	async pruneRemotes(): Promise<void> {
@@ -424,6 +451,20 @@ export class GitService {
 			.filter((line) => line.includes(" "))
 			.filter((line) => line.split(" ")[1] !== "[gone]")
 			.map((line) => line.split(" ")[0])
+	}
+
+	private async branchExists(branch: string): Promise<boolean> {
+		try {
+			await execa("git", [
+				"show-ref",
+				"--verify",
+				"--quiet",
+				`refs/heads/${branch}`,
+			])
+			return true
+		} catch (_error) {
+			return false
+		}
 	}
 
 	private async getUsedWorktreeBranches(): Promise<Set<string>> {
