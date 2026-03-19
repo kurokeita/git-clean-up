@@ -43,7 +43,7 @@ describe("GitService.getDefaultBranch", () => {
 			return Promise.resolve(mockResult(""))
 		})
 
-		await expect(gitService.getDefaultBranch()).resolves.toBe("master")
+		await expect(gitService.getDefaultBranch()).resolves.toBe("origin/master")
 	})
 
 	it("falls back to the local main branch when origin HEAD is unavailable", async () => {

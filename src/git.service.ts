@@ -19,7 +19,7 @@ export class GitService {
 				"symbolic-ref",
 				"refs/remotes/origin/HEAD",
 			])
-			const remoteHead = stdout.trim().match(/^refs\/remotes\/origin\/(.+)$/)
+			const remoteHead = stdout.trim().match(/^refs\/remotes\/(.+)$/)
 			if (remoteHead?.[1]) {
 				return remoteHead[1]
 			}

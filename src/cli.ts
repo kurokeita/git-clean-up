@@ -3,7 +3,7 @@ import type { CleanupCategory } from "./cleanup.types"
 import { APP_NAME, getVersion } from "./version"
 
 export interface CliOptions {
-	target: string
+	target?: string
 	include: CleanupCategory[]
 	json: boolean
 	apply: boolean
@@ -63,17 +63,13 @@ function collectOptions(options: {
 		apply: options.apply ?? false,
 		include: parseInclude(options.include),
 		json: options.json ?? false,
-		target: options.target ?? "main",
+		target: options.target,
 	}
 }
 
 function addSharedOptions(command: Command): Command {
 	return command
-		.option(
-			"-t, --target <branch>",
-			"Target branch to check for merges",
-			"main",
-		)
+		.option("-t, --target <branch>", "Target branch to check for merges")
 		.option(
 			"-i, --include <categories>",
 			"Comma-separated categories: branches, stashes, worktrees",

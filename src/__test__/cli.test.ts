@@ -36,7 +36,7 @@ describe("CLI Command Parsing", () => {
 				apply: false,
 				include: ["branch", "stash", "worktree"],
 				json: false,
-				target: "main",
+				target: undefined,
 			},
 		})
 	})
@@ -55,7 +55,7 @@ describe("CLI Command Parsing", () => {
 				apply: false,
 				include: ["branch", "worktree"],
 				json: true,
-				target: "main",
+				target: undefined,
 			},
 		})
 	})
