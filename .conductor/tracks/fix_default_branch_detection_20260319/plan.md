@@ -2,10 +2,10 @@
 
 ## Phase 1: Preparation and Failing Tests
 
-- [ ] Task: Create unit tests for `GitService.getDefaultBranch`.
-  - [ ] [Sub-task]: Add test file `src/__test__/git.service.default-branch.test.ts`.
-  - [ ] [Sub-task]: Mock various git repository states (no remote, main exists, only master exists).
-  - [ ] [Sub-task]: Assert that `getDefaultBranch` returns the expected branch name.
+- [x] Task: Create unit tests for `GitService.getDefaultBranch`. 77fd8c3
+  - [x] [Sub-task]: Add test file `src/__test__/git.service.default-branch.test.ts`.
+  - [x] [Sub-task]: Mock various git repository states (no remote, main exists, only master exists).
+  - [x] [Sub-task]: Assert that `getDefaultBranch` returns the expected branch name.
 - [ ] Task: Manual Verification — 'Phase 1 Preparation'
 
 ## Phase 2: Implementation
