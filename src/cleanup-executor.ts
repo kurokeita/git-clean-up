@@ -3,10 +3,11 @@ import type { CleanupFinding } from "./cleanup.types"
 
 export class CleanupExecutor {
 	previewCommands(findings: CleanupFinding[]): string[] {
+		const sortedFindings = this.sortFindings(findings)
 		const seenActions = new Set<string>()
 		const commands: string[] = []
 
-		for (const finding of findings) {
+		for (const finding of sortedFindings) {
 			if (!finding.fixable) {
 				continue
 			}
@@ -24,9 +25,10 @@ export class CleanupExecutor {
 	}
 
 	async run(findings: CleanupFinding[]): Promise<void> {
+		const sortedFindings = this.sortFindings(findings)
 		const seenActions = new Set<string>()
 
-		for (const finding of findings) {
+		for (const finding of sortedFindings) {
 			if (!finding.fixable) {
 				continue
 			}
@@ -40,6 +42,25 @@ export class CleanupExecutor {
 			const [command, ...args] = this.toCommandArgs(finding)
 			await execa(command, args)
 		}
+	}
+
+	private sortFindings(findings: CleanupFinding[]): CleanupFinding[] {
+		return [...findings].sort((a, b) => {
+			if (
+				a.cleanupAction.type === "drop-stash" &&
+				b.cleanupAction.type === "drop-stash"
+			) {
+				const indexA = this.getStashIndex(a.cleanupAction.target)
+				const indexB = this.getStashIndex(b.cleanupAction.target)
+				return indexB - indexA
+			}
+			return 0
+		})
+	}
+
+	private getStashIndex(target: string): number {
+		const match = target.match(/stash@{(\d+)}/)
+		return match ? Number.parseInt(match[1], 10) : 0
 	}
 
 	private toCommandArgs(finding: CleanupFinding): [string, ...string[]] {
