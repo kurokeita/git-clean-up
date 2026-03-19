@@ -144,6 +144,33 @@ describe("E2E", () => {
 		expect(stdout.trim()).toBe("")
 	})
 
+	it("removes selected stashes when stash cleanup is applied", async () => {
+		const before = await execa("git", ["stash", "list"], {
+			cwd: testRepoPath,
+		})
+		const beforeEntries = before.stdout
+			.split("\n")
+			.map((line) => line.trim())
+			.filter(Boolean)
+		expect(beforeEntries.length).toBeGreaterThan(0)
+
+		await runCli(
+			"clean",
+			"--include",
+			"stashes",
+			"--age-days",
+			"0",
+			"--all",
+			"--apply",
+		)
+
+		const after = await execa("git", ["stash", "list"], {
+			cwd: testRepoPath,
+		})
+
+		expect(after.stdout.trim()).toBe("")
+	})
+
 	it("uses origin/main when the local main branch is deleted", async () => {
 		const { stdout } = await runRemoteCli(
 			"scan",

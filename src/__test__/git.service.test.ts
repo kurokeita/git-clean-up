@@ -167,6 +167,30 @@ describe(GitService.name, () => {
 	})
 
 	describe("getStashFindings", () => {
+		it("requests stable stash references for cleanup actions", async () => {
+			vi.mocked(execa).mockResolvedValue(
+				mockResult("stash@{0}|1700000000|On feature/demo: shared message"),
+			)
+
+			const findings = await gitService.getStashFindings(30)
+
+			expect(execa).toHaveBeenCalledWith("git", [
+				"stash",
+				"list",
+				"--format=%gd|%ct|%gs",
+			])
+			expect(findings).toEqual(
+				expect.arrayContaining([
+					expect.objectContaining({
+						cleanupAction: expect.objectContaining({
+							target: "stash@{0}",
+							type: "drop-stash",
+						}),
+					}),
+				]),
+			)
+		})
+
 		it("returns old, duplicate-message, and stale WIP stashes", async () => {
 			const oldTimestamp = Math.floor(Date.now() / 1000) - 60 * 60 * 24 * 45
 			const freshTimestamp = Math.floor(Date.now() / 1000) - 60 * 60 * 24 * 2

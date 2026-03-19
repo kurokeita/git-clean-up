@@ -204,7 +204,6 @@ export class GitService {
 		const { stdout } = await execa("git", [
 			"stash",
 			"list",
-			"--date=unix",
 			"--format=%gd|%ct|%gs",
 		])
 

@@ -7,6 +7,7 @@ const uiMock = vi.hoisted(() => ({
 		start: vi.fn(),
 		stop: vi.fn(),
 	})),
+	formatFindingLabel: vi.fn((finding) => finding.title),
 	promptForUpdate: vi.fn(),
 	selectFindingAction: vi.fn(),
 	selectFindingCategory: vi.fn(),
@@ -153,6 +154,52 @@ describe("runApp", () => {
 		expect(gitServiceMock.pruneRemotes).not.toHaveBeenCalled()
 		expect(uiMock.showDone).toHaveBeenCalledWith(
 			expect.stringContaining("Updated git-clean-up"),
+		)
+	})
+
+	it("re-scans after interactive stash cleanup and stops when findings are gone", async () => {
+		cliMock.getParsedCommand.mockReturnValue({
+			mode: "scan",
+			options: {
+				ageDays: 30,
+				all: false,
+				apply: false,
+				include: ["stash"],
+				json: false,
+				target: undefined,
+			},
+		})
+
+		const stashFinding = {
+			category: "stash" as const,
+			cleanupAction: {
+				target: "stash@{0}",
+				type: "drop-stash" as const,
+			},
+			fixable: true,
+			id: "stash:stash@{0}:old",
+			reason: "Older than 30 days",
+			risk: "medium" as const,
+			title: "stash@{0}: example",
+		}
+
+		gitServiceMock.getStashFindings
+			.mockResolvedValueOnce([stashFinding])
+			.mockResolvedValueOnce([stashFinding])
+			.mockResolvedValueOnce([])
+		uiMock.selectFindingCategory.mockResolvedValue("stash")
+		uiMock.selectFindings.mockResolvedValue([stashFinding])
+		uiMock.selectFindingAction.mockResolvedValue("apply")
+		uiMock.confirmDeletion.mockResolvedValue(true)
+		cleanupExecutorMock.run.mockResolvedValue(undefined)
+
+		const { runApp } = await import("../index")
+		await runApp()
+
+		expect(gitServiceMock.getStashFindings).toHaveBeenCalledTimes(3)
+		expect(cleanupExecutorMock.run).toHaveBeenCalledWith([stashFinding])
+		expect(uiMock.showDone).toHaveBeenCalledWith(
+			"Your workspace is already clean! 🎉",
 		)
 	})
 })
