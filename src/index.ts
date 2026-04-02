@@ -15,6 +15,10 @@ import { GitService } from "./git.service"
 import * as ui from "./ui"
 import { APP_NAME, checkForUpdates, installUpdate } from "./version"
 
+/**
+ * Collects all cleanup findings from enabled categories.
+ * Runs branch, stash, and worktree detection in parallel where possible.
+ */
 async function collectFindings(
 	gitService: GitService,
 	options: ScanOptions,
@@ -34,6 +38,10 @@ async function collectFindings(
 	return findings
 }
 
+/**
+ * Checks if findings violate policy thresholds (maxFindings, failOn).
+ * Used for CI mode to determine exit code.
+ */
 function checkPolicyViolation(
 	findings: CleanupFinding[],
 	options: ScanOptions,

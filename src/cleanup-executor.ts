@@ -1,6 +1,10 @@
 import { execa } from "execa"
 import type { CleanupFinding } from "./cleanup.types"
 
+/**
+ * Executes cleanup actions (delete-branch, drop-stash, remove-worktree)
+ * with deduplication, dry-run preview, and confirmation flow.
+ */
 export class CleanupExecutor {
 	previewCommands(findings: CleanupFinding[]): string[] {
 		const sortedFindings = this.sortFindings(findings)

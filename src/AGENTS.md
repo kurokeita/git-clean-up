@@ -49,3 +49,10 @@ cleanup-executor.ts → execute actions
 - **Error handling**: graceful fallbacks for git ops, structured exit codes
 - **No side effects** in modules — all behavior through exported functions/classes
 - **Startup config UX**: interactive `scan` may create missing config files or repair an invalid `defaultTargetBranch`; `$schema` is ignored at runtime, accepted by the parser, and written as the canonical `CONFIG_SCHEMA_URL` on init.
+
+## New in This Branch
+
+- `git-worktree-inspector.ts` — deep inspection for dirty/unpushed worktrees, detached HEAD safety checks
+- **CI/policy mode** — new CLI flags: `--fail-on`, `--max-findings`, `--summary`
+- **Layered config** — supports global (`~/.git-clean-up.json`) and repo-local (`.git-clean-up.json`) configs with proper precedence
+- **Interactive config repair** — prompts user to fix invalid `defaultTargetBranch` during `scan`
