@@ -1,3 +1,4 @@
+/** Default branch names that should never be deleted. */
 export const DEFAULT_PROTECTED_BRANCHES = ["main", "master", "develop", "dev"]
 
 function toPatternRegex(pattern: string): RegExp {
@@ -6,6 +7,11 @@ function toPatternRegex(pattern: string): RegExp {
 	return new RegExp(`^${wildcardAware}$`, "i")
 }
 
+/**
+ * Tests whether a branch name matches a single pattern.
+ * Supports `*` wildcards (e.g., `release/*`).
+ * Matching is case-insensitive.
+ */
 export function matchesBranchPattern(
 	branchName: string,
 	pattern: string,
@@ -13,6 +19,9 @@ export function matchesBranchPattern(
 	return toPatternRegex(pattern).test(branchName)
 }
 
+/**
+ * Tests whether a branch name matches any pattern in the list.
+ */
 export function matchesBranchPatterns(
 	branchName: string,
 	patterns: string[],

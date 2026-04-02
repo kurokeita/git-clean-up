@@ -15,6 +15,7 @@ interface WorktreeInfo {
 	detached: boolean
 }
 
+/** Metadata about a single branch used for finding enrichment. */
 interface BranchInsight {
 	aheadCount: number
 	behindCount: number
@@ -24,6 +25,9 @@ interface BranchInsight {
 }
 
 export class GitService {
+	/**
+	 * Returns the absolute path to the repository root.
+	 */
 	async getRepositoryRoot(): Promise<string> {
 		const { stdout } = await execa("git", ["rev-parse", "--show-toplevel"])
 		return stdout.trim()
@@ -195,6 +199,9 @@ export class GitService {
 			.map((line) => line.split(" ")[0])
 	}
 
+	/**
+	 * Returns local branches that have no upstream tracking reference.
+	 */
 	async getNoUpstreamBranches(): Promise<string[]> {
 		const { stdout } = await execa("git", [
 			"for-each-ref",
@@ -257,6 +264,10 @@ export class GitService {
 		return squashed
 	}
 
+	/**
+	 * Identifies branches significantly diverged from the target.
+	 * Uses ahead/behind thresholds from the resolved policy.
+	 */
 	async getLongDivergedBranches(
 		targetBranch: string,
 		policy: ResolvedCleanupPolicy,
@@ -408,6 +419,11 @@ export class GitService {
 		return findings
 	}
 
+	/**
+	 * Collects all branch cleanup findings by running detection heuristics in parallel.
+	 * Enriches findings with branch metadata (age, ahead/behind counts, upstream).
+	 * Respects policy for protected branches, exclusions, and thresholds.
+	 */
 	async getBranchFindings(options: ScanOptions): Promise<CleanupFinding[]> {
 		const policy = options.policy ?? DEFAULT_CLEANUP_POLICY
 		const [merged, gone, noUpstream, allLocal, worktreeBranches, diverged] =
@@ -563,6 +579,10 @@ export class GitService {
 		return [...findings.values()]
 	}
 
+	/**
+	 * Collects all worktree cleanup findings (missing paths, detached heads, stale branches).
+	 * Respects policy for protected branch exclusions.
+	 */
 	async getWorktreeFindings(options: ScanOptions): Promise<CleanupFinding[]> {
 		const policy = options.policy ?? DEFAULT_CLEANUP_POLICY
 		const [worktrees, staleBranches, currentWorktreePath] = await Promise.all([

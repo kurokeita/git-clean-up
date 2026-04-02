@@ -2,6 +2,10 @@ export type CleanupCategory = "branch" | "stash" | "worktree"
 
 export type CleanupRisk = "low" | "medium" | "high"
 
+/**
+ * User-provided cleanup policy from `.git-clean-up.json`.
+ * All fields are optional — missing fields fall back to built-in defaults.
+ */
 export interface CleanupPolicy {
 	protectedBranches?: string[]
 	includeCategories?: CleanupCategory[]
@@ -12,6 +16,10 @@ export interface CleanupPolicy {
 	branchExcludePatterns?: string[]
 }
 
+/**
+ * Fully resolved cleanup policy with all fields populated.
+ * Produced by merging CleanupPolicy with DEFAULT_CLEANUP_POLICY.
+ */
 export interface ResolvedCleanupPolicy {
 	protectedBranches: string[]
 	includeCategories: CleanupCategory[]
@@ -33,6 +41,10 @@ export interface CleanupAction {
 	path?: string
 }
 
+/**
+ * Structured metadata attached to a CleanupFinding.
+ * Used by the UI to display richer context (age, ahead/behind, warnings).
+ */
 export interface CleanupFindingDetails {
 	aheadCount?: number
 	behindCount?: number
@@ -53,6 +65,7 @@ export interface CleanupFinding {
 	details?: CleanupFindingDetails
 }
 
+/** Options passed to scan/findings methods. */
 export interface ScanOptions {
 	targetBranch: string
 	ageDays: number

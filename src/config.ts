@@ -10,6 +10,7 @@ import type {
 	ResolvedCleanupPolicy,
 } from "./cleanup.types"
 
+/** Filename for repo-local cleanup policy configuration. */
 export const CONFIG_FILE_NAME = ".git-clean-up.json"
 
 const VALID_CATEGORIES: CleanupCategory[] = ["branch", "stash", "worktree"]
@@ -23,6 +24,7 @@ const VALID_KEYS = new Set([
 	"branchExcludePatterns",
 ])
 
+/** Built-in defaults used when no repo-local config exists. */
 export const DEFAULT_CLEANUP_POLICY: ResolvedCleanupPolicy = {
 	branchExcludePatterns: [],
 	branchInactiveDays: 90,
@@ -33,8 +35,11 @@ export const DEFAULT_CLEANUP_POLICY: ResolvedCleanupPolicy = {
 	stashAgeDays: 30,
 }
 
+/** Result of loading cleanup policy from disk. */
 export interface LoadedCleanupPolicy {
+	/** Absolute path to the config file, or undefined if using defaults. */
 	configPath?: string
+	/** The resolved policy with all fields populated. */
 	policy: ResolvedCleanupPolicy
 }
 
@@ -82,6 +87,10 @@ function parseCategories(value: unknown): CleanupCategory[] {
 		: [...VALID_CATEGORIES]
 }
 
+/**
+ * Merges a partial user config with built-in defaults.
+ * Protected branches extend (not replace) the default list.
+ */
 export function resolveCleanupPolicy(
 	config: CleanupPolicy = {},
 ): ResolvedCleanupPolicy {
@@ -105,6 +114,11 @@ export function resolveCleanupPolicy(
 	}
 }
 
+/**
+ * Validates and extracts a CleanupPolicy from parsed JSON.
+ * Rejects unknown keys and validates types/ranges for each field.
+ * @throws Error if the input is not a valid policy object.
+ */
 export function parseCleanupPolicy(raw: unknown): CleanupPolicy {
 	if (!isPlainObject(raw)) {
 		throw new Error("cleanup policy must be a JSON object")
@@ -176,6 +190,11 @@ export function parseCleanupPolicy(raw: unknown): CleanupPolicy {
 	return policy
 }
 
+/**
+ * Loads cleanup policy from `.git-clean-up.json` in the repository root.
+ * Returns built-in defaults if no config file exists.
+ * @throws Error if the config file exists but is malformed.
+ */
 export async function loadCleanupPolicy(
 	repositoryRoot: string,
 ): Promise<LoadedCleanupPolicy> {
