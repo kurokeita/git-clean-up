@@ -35,7 +35,7 @@ User runs: git-clean-up [mode] [options]
     ↓
 [cli.ts] parse args → ParsedCommand
     ↓
-[config.ts] resolve policy (CLI > config > defaults)
+[config.ts] resolve policy (defaults <- global <- local; CLI overrides in index.ts)
     ↓
 [git.service.ts] collectFindings() — parallel scan
     ↓
@@ -48,7 +48,7 @@ User runs: git-clean-up [mode] [options]
 |------|---------|
 | `scan` | Interactive scan — select categories, review findings, execute actions |
 | `clean` | Non-interactive clean — preview or `--apply` |
-| `init` | Initialize config file |
+| `init` | Reserved/not currently implemented as a standalone command |
 
 ## Key Conventions
 
@@ -62,6 +62,10 @@ User runs: git-clean-up [mode] [options]
 
 - Local: `.git-clean-up.json` (CWD or repo root)
 - Global: `~/.git-clean-up.json`
+- Precedence: CLI args > local config > global config > built-in defaults
+- `CONFIG_SCHEMA_URL` (`https://github.com/kurokeita/git-clean-up/config-schema.json`)
+  is the canonical `$schema` reference written by the init flow; ignored at runtime.
+- Interactive `scan` startup may offer config creation/repair flows
 - History: `.git-clean-up/history/` (inside repo)
 
 ## Scripts

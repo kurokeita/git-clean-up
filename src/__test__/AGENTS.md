@@ -8,12 +8,12 @@ All test files for the git-clean-up project. Co-located with source in `src/__te
 
 | File | What It Tests | Approach |
 |------|---------------|----------|
-| `index.test.ts` | `runApp()` orchestrator | Extensive mocking of all dependencies; covers all modes, config priority, target branch repair |
+| `index.test.ts` | `runApp()` orchestrator | Extensive mocking of all dependencies; covers all modes, config priority, startup config prompts, and target branch repair loops |
 | `cli.test.ts` | CLI argument parsing | Tests all modes and option combinations |
-| `config.test.ts` | Config loading/validation | Defaults, merging, rejection of invalid keys, template rendering |
+| `config.test.ts` | Config loading/validation | Defaults, global/local merge precedence, `$schema` acceptance, config initialization with canonical schema URL |
 | `git.service.test.ts` | GitService operations | Mocks `execa`; tests branch/stash/worktree finding detection |
 | `git.service.default-branch.test.ts` | `getDefaultBranch()` fallback chain | origin HEAD → local main → local master → current branch |
-| `ui.test.ts` | UI helpers | Grouping findings, formatting labels, serialization, prompts |
+| `ui.test.ts` | UI helpers | Grouping findings, formatting labels, serialization, update prompts, and config setup/repair prompts |
 | `cleanup-executor.test.ts` | Action executor | Deduplication, dry-run preview, stash sort order |
 | `branch-protection.test.ts` | Branch protection patterns | Default protected branches, case-insensitivity, wildcards |
 | `e2e.test.ts` | End-to-end | Real git repo; builds project first, tests full CLI flows |
