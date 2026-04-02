@@ -8,6 +8,7 @@ import type {
 	ScanOptions,
 } from "./cleanup.types"
 import { DEFAULT_CLEANUP_POLICY } from "./config"
+import { inspectWorktree } from "./git-worktree-inspector"
 
 interface WorktreeInfo {
 	path: string
@@ -608,33 +609,50 @@ export class GitService {
 				continue
 			}
 
-			if (!this.pathLooksAvailable(worktree.path)) {
-				findings.set(`worktree:${worktree.path}:missing-path`, {
+			const isMissing = !this.pathLooksAvailable(worktree.path)
+			const insight = isMissing
+				? undefined
+				: await inspectWorktree(worktree.path, worktree.branch)
+
+			const addWorktreeFinding = (
+				suffix: string,
+				reason: string,
+				overrides: Partial<CleanupFinding> = {},
+			) => {
+				const isRisky =
+					insight?.isDirty ||
+					insight?.hasUntracked ||
+					(insight?.unpushedCount ?? 0) > 0
+
+				findings.set(`worktree:${worktree.path}:${suffix}`, {
 					category: "worktree",
 					cleanupAction: {
 						target: worktree.path,
 						type: "remove-worktree",
 					},
-					fixable: true,
-					id: `worktree:${worktree.path}:missing-path`,
-					reason: "Worktree path is missing or inaccessible",
-					risk: "high",
+					details: insight?.details,
+					fixable: !isRisky && (overrides.fixable ?? true),
+					id: `worktree:${worktree.path}:${suffix}`,
+					reason,
+					risk: isRisky ? "high" : (overrides.risk ?? "medium"),
 					title: worktree.path,
+					...overrides,
 				})
 			}
 
-			if (worktree.detached) {
-				findings.set(`worktree:${worktree.path}:detached-head`, {
-					category: "worktree",
-					cleanupAction: {
-						target: worktree.path,
-						type: "remove-worktree",
+			if (isMissing) {
+				addWorktreeFinding(
+					"missing-path",
+					"Worktree path is missing or inaccessible",
+					{
+						risk: "high",
 					},
-					fixable: true,
-					id: `worktree:${worktree.path}:detached-head`,
-					reason: "Worktree is on a detached HEAD",
+				)
+			}
+
+			if (worktree.detached) {
+				addWorktreeFinding("detached-head", "Worktree is on a detached HEAD", {
 					risk: "high",
-					title: worktree.path,
 				})
 			}
 
@@ -642,33 +660,18 @@ export class GitService {
 				worktree.branch &&
 				isProtectedBranch(worktree.branch, policy.protectedBranches)
 			) {
-				findings.set(`worktree:${worktree.path}:protected-branch`, {
-					category: "worktree",
-					cleanupAction: {
-						target: worktree.path,
-						type: "remove-worktree",
-					},
-					fixable: false,
-					id: `worktree:${worktree.path}:protected-branch`,
-					reason: `Worktree is attached to protected branch ${worktree.branch}`,
-					risk: "high",
-					title: worktree.path,
-				})
+				addWorktreeFinding(
+					"protected-branch",
+					`Worktree is attached to protected branch ${worktree.branch}`,
+					{ fixable: false, risk: "high" },
+				)
 			}
 
 			if (worktree.branch && staleBranches.has(worktree.branch)) {
-				findings.set(`worktree:${worktree.path}:stale-branch`, {
-					category: "worktree",
-					cleanupAction: {
-						target: worktree.path,
-						type: "remove-worktree",
-					},
-					fixable: true,
-					id: `worktree:${worktree.path}:stale-branch`,
-					reason: `Worktree points to stale branch ${worktree.branch}`,
-					risk: "medium",
-					title: worktree.path,
-				})
+				addWorktreeFinding(
+					"stale-branch",
+					`Worktree points to stale branch ${worktree.branch}`,
+				)
 			}
 		}
 
