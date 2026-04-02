@@ -15,6 +15,7 @@ export interface CleanupPolicy {
 	divergedAheadCount?: number
 	divergedBehindCount?: number
 	branchExcludePatterns?: string[]
+	skipPrune?: boolean
 }
 
 /**
@@ -30,6 +31,7 @@ export interface ResolvedCleanupPolicy {
 	divergedAheadCount: number
 	divergedBehindCount: number
 	branchExcludePatterns: string[]
+	skipPrune: boolean
 }
 
 export type CleanupActionType =
@@ -76,4 +78,5 @@ export interface ScanOptions {
 	summary?: boolean
 	failOn?: CleanupRisk
 	maxFindings?: number
+	skipPrune?: boolean
 }

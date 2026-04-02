@@ -28,6 +28,7 @@ const VALID_KEYS = new Set([
 	"divergedAheadCount",
 	"divergedBehindCount",
 	"branchExcludePatterns",
+	"skipPrune",
 ])
 
 /** Built-in defaults used when no repo-local config exists. */
@@ -38,6 +39,7 @@ export const DEFAULT_CLEANUP_POLICY: ResolvedCleanupPolicy = {
 	divergedBehindCount: 10,
 	includeCategories: [...VALID_CATEGORIES],
 	protectedBranches: [...DEFAULT_PROTECTED_BRANCHES],
+	skipPrune: false,
 	stashAgeDays: 30,
 }
 
@@ -131,6 +133,7 @@ export function resolveCleanupPolicy(
 		includeCategories:
 			config.includeCategories ?? DEFAULT_CLEANUP_POLICY.includeCategories,
 		protectedBranches: [...new Set(protectedBranches)],
+		skipPrune: config.skipPrune ?? DEFAULT_CLEANUP_POLICY.skipPrune,
 		stashAgeDays: config.stashAgeDays ?? DEFAULT_CLEANUP_POLICY.stashAgeDays,
 	}
 }
@@ -210,6 +213,13 @@ export function parseCleanupPolicy(raw: unknown): CleanupPolicy {
 		}
 
 		policy.branchExcludePatterns = patterns
+	}
+
+	if ("skipPrune" in raw && raw.skipPrune !== undefined) {
+		if (typeof raw.skipPrune !== "boolean") {
+			throw new Error("skipPrune must be a boolean")
+		}
+		policy.skipPrune = raw.skipPrune
 	}
 
 	return policy

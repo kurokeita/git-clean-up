@@ -12,6 +12,7 @@ export interface CliOptions {
 	summary: boolean
 	failOn?: string
 	maxFindings?: number
+	skipPrune?: boolean
 }
 
 export interface ParsedCommand {
@@ -57,6 +58,7 @@ function collectOptions(options: {
 	summary?: boolean
 	failOn?: string
 	maxFindings?: number
+	skipPrune?: boolean
 }): CliOptions {
 	return {
 		ageDays:
@@ -73,6 +75,7 @@ function collectOptions(options: {
 				? Number(options.maxFindings)
 				: options.maxFindings,
 		summary: options.summary ?? false,
+		skipPrune: options.skipPrune,
 		target: options.target,
 	}
 }
@@ -101,6 +104,7 @@ function addSharedOptions(command: Command): Command {
 			"Fail (exit 1) if total findings exceed this number",
 			(value) => Number(value),
 		)
+		.option("--skip-prune", "Skip the initial remote prune step")
 }
 
 export function createCli() {

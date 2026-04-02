@@ -69,6 +69,11 @@
 				"minLength": 1
 			},
 			"examples": [["wip/*", "experiment/*"]]
+		},
+		"skipPrune": {
+			"type": "boolean",
+			"description": "Skip the initial remote prune step when scanning.",
+			"default": false
 		}
 	}
 }

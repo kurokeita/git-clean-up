@@ -491,12 +491,12 @@ export class GitService {
 			}
 
 			const insight = branchInsights.get(branch)
-			const safetyWarnings =
-				insight && insight.aheadCount > 0
-					? [
-							`${insight.aheadCount} commit${insight.aheadCount === 1 ? "" : "s"} unique to this branch`,
-						]
-					: []
+			const hasUniqueCommits = insight && insight.aheadCount > 0
+			const safetyWarnings = hasUniqueCommits
+				? [
+						`${insight.aheadCount} commit${insight.aheadCount === 1 ? "" : "s"} unique to this branch`,
+					]
+				: []
 
 			findings.set(`branch:${branch}:${suffix}`, {
 				category: "branch",
@@ -504,10 +504,10 @@ export class GitService {
 					target: branch,
 					type: "delete-branch",
 				},
-				fixable: true,
+				fixable: !hasUniqueCommits,
 				id: `branch:${branch}:${suffix}`,
 				reason,
-				risk: suffix === "gone" ? "low" : "medium",
+				risk: hasUniqueCommits ? "high" : suffix === "gone" ? "low" : "medium",
 				title: branch,
 				details: this.toFindingDetails(insight, safetyWarnings),
 				...overrides,
@@ -580,10 +580,16 @@ export class GitService {
 			potentialSquashed,
 		)
 		for (const branch of squashed) {
+			const insight = branchInsights.get(branch)
+			const hasUniqueCommits = insight && insight.aheadCount > 0
 			addFinding(
 				branch,
 				"squashed",
 				`Squash-merged into ${options.targetBranch}`,
+				{
+					fixable: !hasUniqueCommits,
+					risk: hasUniqueCommits ? "high" : "medium",
+				},
 			)
 		}
 

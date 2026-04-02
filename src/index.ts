@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { pathToFileURL } from "node:url"
+import color from "picocolors"
 import type { CleanupFinding, CleanupRisk, ScanOptions } from "./cleanup.types"
 import { CleanupExecutor } from "./cleanup-executor"
 import { createCli } from "./cli"
@@ -91,11 +92,29 @@ async function runInteractiveScanLoop(
 		)
 		ui.showNote(categoryFindings.map(ui.formatFindingLabel).join("\n"))
 
-		const selectedFindings = await ui.selectFindings(
-			categoryFindings.filter((finding) => finding.fixable),
-		)
+		// Show all findings (including non-fixable) so user can select them
+		// User will be warned if they try to clean non-fixable ones
+		const selectedFindings = await ui.selectFindings(categoryFindings)
 		if (selectedFindings.length === 0) {
 			continue
+		}
+
+		// Check if any non-fixable findings were selected and warn
+		const nonFixableSelected = selectedFindings.filter((f) => !f.fixable)
+		if (nonFixableSelected.length > 0) {
+			const warningMessage = [
+				color.red(
+					"⚠ Warning: You have selected branches that cannot be automatically cleaned:",
+				),
+				"",
+				...nonFixableSelected.map(
+					(f) => `  ${color.red("✖")} ${f.title} - ${f.reason}`,
+				),
+				"",
+				"These branches have unpushed commits that would be permanently lost if deleted.",
+				"You must manually handle these branches outside of this tool.",
+			].join("\n")
+			ui.showNote(warningMessage)
 		}
 
 		const selectedAction = await ui.selectFindingAction(selectedFindings.length)
@@ -229,7 +248,9 @@ export async function runApp() {
 		}
 
 		let targetBranch = parsedCommand.options.target
-		const shouldPrune = !targetBranch
+		const cliSkipPrune = parsedCommand.options.skipPrune
+		const shouldPrune =
+			!(cliSkipPrune ?? loadedPolicy.policy.skipPrune) && !targetBranch
 
 		if (shouldPrune) {
 			s.start("Pruning remotes...")
@@ -393,8 +414,12 @@ if (
 	process.argv[1] &&
 	import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
-	runApp().catch((err) => {
-		console.error(err)
-		process.exit(1)
-	})
+	runApp()
+		.then(() => {
+			process.exit(0)
+		})
+		.catch((err) => {
+			console.error(err)
+			process.exit(1)
+		})
 }

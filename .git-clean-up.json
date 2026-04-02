@@ -7,5 +7,6 @@
 	"divergedBehindCount": 10,
 	"includeCategories": ["branch", "stash", "worktree"],
 	"protectedBranches": ["main"],
-	"stashAgeDays": 30
+	"stashAgeDays": 30,
+	"skipPrune": false
 }
