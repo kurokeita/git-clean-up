@@ -193,4 +193,20 @@ describe("config", () => {
 		expect(loaded.localConfigPath).toBe(configPath)
 		expect(loaded.policy).toEqual(DEFAULT_CLEANUP_POLICY)
 	})
+
+	it("lets local config initialization inherit from a provided policy", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "git-clean-up-config-"))
+		tempDirectories.push(directory)
+		const configPath = join(directory, CONFIG_FILE_NAME)
+
+		const customPolicy = {
+			...DEFAULT_CLEANUP_POLICY,
+			stashAgeDays: 99,
+		}
+
+		await initializeCleanupPolicyConfig(configPath, customPolicy)
+		const loaded = await loadCleanupPolicy(directory, directory)
+
+		expect(loaded.policy.stashAgeDays).toBe(99)
+	})
 })

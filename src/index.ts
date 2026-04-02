@@ -182,7 +182,10 @@ export async function runApp() {
 			}
 
 			if (choice === "local") {
-				await initializeCleanupPolicyConfig(getLocalConfigPath(repositoryRoot))
+				await initializeCleanupPolicyConfig(
+					getLocalConfigPath(repositoryRoot),
+					loadedPolicy.policy,
+				)
 				loadedPolicy = await loadCleanupPolicy(repositoryRoot)
 			}
 		}
