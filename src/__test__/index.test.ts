@@ -335,6 +335,7 @@ describe("runApp", () => {
 		)
 		expect(configMock.initializeCleanupPolicyConfig).toHaveBeenCalledWith(
 			`${process.cwd()}/.git-clean-up.json`,
+			expect.any(Object),
 		)
 	})
 

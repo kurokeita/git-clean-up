@@ -222,6 +222,11 @@ export async function runApp() {
 					!shouldPromptForConfigSetup ||
 					!loadedPolicy.defaultTargetBranchSourcePath
 				) {
+					if (configuredTargetBranch !== "") {
+						throw new Error(
+							`Configured defaultTargetBranch \`${configuredTargetBranch}\` from ${loadedPolicy.defaultTargetBranchSourcePath ?? "config"} does not exist.`,
+						)
+					}
 					targetBranch = detectedTargetBranch
 					break
 				}
