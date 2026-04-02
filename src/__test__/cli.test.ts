@@ -31,10 +31,10 @@ describe("CLI Command Parsing", () => {
 		expect(cli.getParsedCommand()).toEqual({
 			mode: "scan",
 			options: {
-				ageDays: 30,
+				ageDays: undefined,
 				all: false,
 				apply: false,
-				include: ["branch", "stash", "worktree"],
+				include: undefined,
 				json: false,
 				target: undefined,
 			},
@@ -50,7 +50,7 @@ describe("CLI Command Parsing", () => {
 		expect(cli.getParsedCommand()).toEqual({
 			mode: "scan",
 			options: {
-				ageDays: 30,
+				ageDays: undefined,
 				all: false,
 				apply: false,
 				include: ["branch", "worktree"],
@@ -75,7 +75,7 @@ describe("CLI Command Parsing", () => {
 				ageDays: 14,
 				all: false,
 				apply: true,
-				include: ["branch", "stash", "worktree"],
+				include: undefined,
 				json: false,
 				target: "develop",
 			},

@@ -1,7 +1,12 @@
 import { existsSync } from "node:fs"
 import { execa } from "execa"
-import { isProtectedBranch } from "./branch-protection"
-import type { CleanupFinding, ScanOptions } from "./cleanup.types"
+import { isProtectedBranch, matchesBranchPatterns } from "./branch-protection"
+import type {
+	CleanupFinding,
+	ResolvedCleanupPolicy,
+	ScanOptions,
+} from "./cleanup.types"
+import { DEFAULT_CLEANUP_POLICY } from "./config"
 
 interface WorktreeInfo {
 	path: string
@@ -10,6 +15,11 @@ interface WorktreeInfo {
 }
 
 export class GitService {
+	async getRepositoryRoot(): Promise<string> {
+		const { stdout } = await execa("git", ["rev-parse", "--show-toplevel"])
+		return stdout.trim()
+	}
+
 	/**
 	 * Detects the repository's default branch.
 	 */
@@ -134,12 +144,19 @@ export class GitService {
 		return squashed
 	}
 
-	async getLongDivergedBranches(targetBranch: string): Promise<string[]> {
+	async getLongDivergedBranches(
+		targetBranch: string,
+		policy: ResolvedCleanupPolicy,
+	): Promise<string[]> {
 		const branches = await this.getTrackedBranchNames()
 		const diverged: string[] = []
 
 		for (const branch of branches) {
-			if (branch === targetBranch || isProtectedBranch(branch)) {
+			if (
+				branch === targetBranch ||
+				isProtectedBranch(branch, policy.protectedBranches) ||
+				matchesBranchPatterns(branch, policy.branchExcludePatterns)
+			) {
 				continue
 			}
 
@@ -153,7 +170,10 @@ export class GitService {
 				const [aheadRaw, behindRaw] = stdout.trim().split("\t")
 				const ahead = Number(aheadRaw || 0)
 				const behind = Number(behindRaw || 0)
-				if (ahead >= 10 && behind >= 10) {
+				if (
+					ahead >= policy.divergedAheadCount &&
+					behind >= policy.divergedBehindCount
+				) {
 					diverged.push(branch)
 				}
 			} catch (_error) {
@@ -281,6 +301,7 @@ export class GitService {
 	}
 
 	async getBranchFindings(options: ScanOptions): Promise<CleanupFinding[]> {
+		const policy = options.policy ?? DEFAULT_CLEANUP_POLICY
 		const [merged, gone, noUpstream, allLocal, worktreeBranches, diverged] =
 			await Promise.all([
 				this.getMergedBranches(options.targetBranch),
@@ -288,7 +309,7 @@ export class GitService {
 				this.getNoUpstreamBranches(),
 				this.getAllLocalBranches(),
 				this.getUsedWorktreeBranches(),
-				this.getLongDivergedBranches(options.targetBranch),
+				this.getLongDivergedBranches(options.targetBranch, policy),
 			])
 
 		const candidates = new Set([
@@ -303,7 +324,8 @@ export class GitService {
 
 		const addFinding = (branch: string, suffix: string, reason: string) => {
 			if (
-				isProtectedBranch(branch) ||
+				isProtectedBranch(branch, policy.protectedBranches) ||
+				matchesBranchPatterns(branch, policy.branchExcludePatterns) ||
 				!candidates.has(branch) ||
 				worktreeBranches.has(branch)
 			) {
@@ -360,10 +382,11 @@ export class GitService {
 	}
 
 	async getWorktreeFindings(options: ScanOptions): Promise<CleanupFinding[]> {
+		const policy = options.policy ?? DEFAULT_CLEANUP_POLICY
 		const [worktrees, staleBranches, currentWorktreePath] = await Promise.all([
 			this.getWorktrees(),
 			this.getWorktreeStaleBranches(options),
-			this.getCurrentWorktreePath(),
+			this.getRepositoryRoot(),
 		])
 
 		const findings = new Map<string, CleanupFinding>()
@@ -403,7 +426,10 @@ export class GitService {
 				})
 			}
 
-			if (worktree.branch && isProtectedBranch(worktree.branch)) {
+			if (
+				worktree.branch &&
+				isProtectedBranch(worktree.branch, policy.protectedBranches)
+			) {
 				findings.set(`worktree:${worktree.path}:protected-branch`, {
 					category: "worktree",
 					cleanupAction: {
@@ -525,21 +551,21 @@ export class GitService {
 		return worktrees
 	}
 
-	private async getCurrentWorktreePath(): Promise<string> {
-		const { stdout } = await execa("git", ["rev-parse", "--show-toplevel"])
-		return stdout.trim()
-	}
-
 	private async getWorktreeStaleBranches(
 		options: ScanOptions,
 	): Promise<Set<string>> {
+		const policy = options.policy ?? DEFAULT_CLEANUP_POLICY
 		const [merged, gone] = await Promise.all([
 			this.getMergedBranches(options.targetBranch),
 			this.getGoneBranches(),
 		])
 
 		return new Set(
-			[...merged, ...gone].filter((branch) => !isProtectedBranch(branch)),
+			[...merged, ...gone].filter(
+				(branch) =>
+					!isProtectedBranch(branch, policy.protectedBranches) &&
+					!matchesBranchPatterns(branch, policy.branchExcludePatterns),
+			),
 		)
 	}
 

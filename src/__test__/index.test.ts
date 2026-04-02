@@ -33,6 +33,7 @@ const cliMock = vi.hoisted(() => ({
 const gitServiceMock = vi.hoisted(() => ({
 	getDefaultBranch: vi.fn(),
 	getBranchFindings: vi.fn(),
+	getRepositoryRoot: vi.fn(),
 	getStashFindings: vi.fn(),
 	getWorktreeFindings: vi.fn(),
 	pruneRemotes: vi.fn(),
@@ -81,6 +82,7 @@ describe("runApp", () => {
 		versionMock.checkForUpdates.mockReset()
 		versionMock.installUpdate.mockReset()
 		gitServiceMock.pruneRemotes.mockReset()
+		gitServiceMock.getRepositoryRoot.mockReset()
 		gitServiceMock.getDefaultBranch.mockReset()
 		gitServiceMock.getBranchFindings.mockReset()
 		gitServiceMock.getStashFindings.mockReset()
@@ -100,6 +102,7 @@ describe("runApp", () => {
 			},
 		})
 		versionMock.checkForUpdates.mockResolvedValue(null)
+		gitServiceMock.getRepositoryRoot.mockResolvedValue(process.cwd())
 		gitServiceMock.pruneRemotes.mockResolvedValue(undefined)
 		gitServiceMock.getDefaultBranch.mockResolvedValue("origin/main")
 		gitServiceMock.getBranchFindings.mockResolvedValue([])
@@ -112,11 +115,13 @@ describe("runApp", () => {
 		await runApp()
 
 		expect(gitServiceMock.getDefaultBranch).toHaveBeenCalledTimes(1)
-		expect(gitServiceMock.getBranchFindings).toHaveBeenCalledWith({
-			ageDays: 30,
-			include: ["branch"],
-			targetBranch: "origin/main",
-		})
+		expect(gitServiceMock.getBranchFindings).toHaveBeenCalledWith(
+			expect.objectContaining({
+				ageDays: 30,
+				include: ["branch"],
+				targetBranch: "origin/main",
+			}),
+		)
 	})
 
 	it("prompts for an update before showing the welcome screen", async () => {

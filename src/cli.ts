@@ -4,10 +4,10 @@ import { APP_NAME, getVersion } from "./version"
 
 export interface CliOptions {
 	target?: string
-	include: CleanupCategory[]
+	include?: CleanupCategory[]
 	json: boolean
 	apply: boolean
-	ageDays: number
+	ageDays?: number
 	all: boolean
 }
 
@@ -16,11 +16,9 @@ export interface ParsedCommand {
 	options: CliOptions
 }
 
-const DEFAULT_INCLUDE: CleanupCategory[] = ["branch", "stash", "worktree"]
-
-function parseInclude(value?: string): CleanupCategory[] {
+function parseInclude(value?: string): CleanupCategory[] | undefined {
 	if (!value) {
-		return DEFAULT_INCLUDE
+		return undefined
 	}
 
 	const categories = value
@@ -43,7 +41,7 @@ function parseInclude(value?: string): CleanupCategory[] {
 			}
 		})
 
-	return categories.length > 0 ? categories : DEFAULT_INCLUDE
+	return categories.length > 0 ? categories : undefined
 }
 
 function collectOptions(options: {
@@ -58,7 +56,7 @@ function collectOptions(options: {
 		ageDays:
 			typeof options.ageDays === "string"
 				? Number(options.ageDays)
-				: (options.ageDays ?? 30),
+				: options.ageDays,
 		all: options.all ?? false,
 		apply: options.apply ?? false,
 		include: parseInclude(options.include),
@@ -79,7 +77,6 @@ function addSharedOptions(command: Command): Command {
 			"--age-days <days>",
 			"Age threshold for stash/worktree findings",
 			(value) => Number(value),
-			30,
 		)
 		.option("-a, --all", "Select all findings without interaction", false)
 }

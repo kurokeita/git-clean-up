@@ -26,6 +26,9 @@ An audit-first CLI tool for cleaning local git repository hygiene. It scans for 
   - Branches active in other worktrees are excluded from branch deletion candidates.
   - `clean` is a preview by default.
   - Explicit confirmation is required before applying cleanup actions unless `--all` is used.
+- **Repo-Local Policy Config**:
+  - `git-clean-up` loads optional repo-local policy from `.git-clean-up.json`.
+  - CLI flags override repo config, and repo config overrides built-in defaults.
 
 ## Installation
 
@@ -62,6 +65,41 @@ git-clean-up clean --include branches,stashes --apply
 # Use a different merge target and age threshold
 git-clean-up scan --target develop --age-days 14
 ```
+
+## Configuration
+
+You can customize cleanup defaults per repository with a `.git-clean-up.json`
+file placed at the repository root:
+
+```json
+{
+  "protectedBranches": ["release/*", "hotfix/*"],
+  "includeCategories": ["branch", "worktree"],
+  "stashAgeDays": 21,
+  "branchInactiveDays": 90,
+  "divergedAheadCount": 8,
+  "divergedBehindCount": 8,
+  "branchExcludePatterns": ["wip/*"]
+}
+```
+
+Supported keys:
+
+- `protectedBranches`: additional exact names or `*` wildcard patterns that
+  should never be treated as cleanup candidates
+- `includeCategories`: default categories to scan (`branch`, `stash`,
+  `worktree`)
+- `stashAgeDays`: default stash age threshold
+- `branchInactiveDays`: reserved for upcoming inactive-branch detection
+- `divergedAheadCount`: default ahead threshold for long-diverged branches
+- `divergedBehindCount`: default behind threshold for long-diverged branches
+- `branchExcludePatterns`: branch patterns to exclude from branch cleanup
+
+Rules:
+
+- CLI flags take precedence over `.git-clean-up.json`
+- `.git-clean-up.json` extends built-in defaults for protected branches
+- Invalid config fails closed with a user-facing error
 
 ## Development
 

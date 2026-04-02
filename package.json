@@ -15,7 +15,7 @@
 		"test:watch": "vitest",
 		"lint": "biome check --error-on-warnings .",
 		"format": "biome format . --write && pnpm run markdownlint --fix",
-		"markdownlint": "markdownlint . -d --ignore node_modules --ignore .git",
+		"markdownlint": "markdownlint . -d --ignore node_modules --ignore .git --ignore .omx",
 		"check": "pnpm run lint && pnpm run markdownlint && tsc --noEmit",
 		"prepare": "pnpm run build",
 		"release": "semantic-release"

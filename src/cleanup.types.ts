@@ -2,6 +2,26 @@ export type CleanupCategory = "branch" | "stash" | "worktree"
 
 export type CleanupRisk = "low" | "medium" | "high"
 
+export interface CleanupPolicy {
+	protectedBranches?: string[]
+	includeCategories?: CleanupCategory[]
+	stashAgeDays?: number
+	branchInactiveDays?: number
+	divergedAheadCount?: number
+	divergedBehindCount?: number
+	branchExcludePatterns?: string[]
+}
+
+export interface ResolvedCleanupPolicy {
+	protectedBranches: string[]
+	includeCategories: CleanupCategory[]
+	stashAgeDays: number
+	branchInactiveDays: number
+	divergedAheadCount: number
+	divergedBehindCount: number
+	branchExcludePatterns: string[]
+}
+
 export type CleanupActionType =
 	| "delete-branch"
 	| "drop-stash"
@@ -27,4 +47,5 @@ export interface ScanOptions {
 	targetBranch: string
 	ageDays: number
 	include: CleanupCategory[]
+	policy?: ResolvedCleanupPolicy
 }

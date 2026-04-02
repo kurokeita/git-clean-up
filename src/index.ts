@@ -3,6 +3,7 @@ import { pathToFileURL } from "node:url"
 import type { CleanupFinding, ScanOptions } from "./cleanup.types"
 import { CleanupExecutor } from "./cleanup-executor"
 import { createCli } from "./cli"
+import { loadCleanupPolicy } from "./config"
 import { GitService } from "./git.service"
 import * as ui from "./ui"
 import { APP_NAME, checkForUpdates, installUpdate } from "./version"
@@ -135,22 +136,28 @@ export async function runApp() {
 			}
 		: ui.createSpinner()
 
-	s.start("Pruning remotes...")
 	try {
-		await gitService.pruneRemotes()
-		s.stop("Remotes pruned")
-	} catch (_error) {
-		s.stop("Failed to prune remotes", 1)
-	}
+		s.start("Loading cleanup policy...")
+		const repositoryRoot = await gitService.getRepositoryRoot()
+		const { policy } = await loadCleanupPolicy(repositoryRoot)
+		s.stop("Cleanup policy loaded")
 
-	s.start("Scanning branches...")
+		s.start("Pruning remotes...")
+		try {
+			await gitService.pruneRemotes()
+			s.stop("Remotes pruned")
+		} catch (_error) {
+			s.stop("Failed to prune remotes", 1)
+		}
 
-	try {
+		s.start("Scanning branches...")
+
 		const targetBranch =
 			parsedCommand.options.target ?? (await gitService.getDefaultBranch())
 		const scanOptions: ScanOptions = {
-			ageDays: parsedCommand.options.ageDays,
-			include: parsedCommand.options.include,
+			ageDays: parsedCommand.options.ageDays ?? policy.stashAgeDays,
+			include: parsedCommand.options.include ?? policy.includeCategories,
+			policy,
 			targetBranch,
 		}
 		const findings = await collectFindings(gitService, scanOptions)
