@@ -1,0 +1,63 @@
+{
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"$id": "https://github.com/kurokeita/git-clean-up/config-schema.json",
+	"title": "git-clean-up Configuration",
+	"description": "Schema for .git-clean-up.json — repo-local cleanup policy.",
+	"type": "object",
+	"additionalProperties": false,
+	"properties": {
+		"protectedBranches": {
+			"type": "array",
+			"description": "Branch names or wildcard patterns that should never be treated as cleanup candidates. Extends the built-in defaults (main, master, develop, dev).",
+			"items": {
+				"type": "string",
+				"minLength": 1
+			},
+			"examples": [["release/*", "hotfix/*", "staging"]]
+		},
+		"includeCategories": {
+			"type": "array",
+			"description": "Default categories to scan when no --include flag is provided.",
+			"items": {
+				"type": "string",
+				"enum": ["branch", "stash", "worktree"]
+			},
+			"minItems": 1,
+			"uniqueItems": true,
+			"default": ["branch", "stash", "worktree"]
+		},
+		"stashAgeDays": {
+			"type": "integer",
+			"description": "Age threshold in days for flagging old stashes.",
+			"minimum": 0,
+			"default": 30
+		},
+		"branchInactiveDays": {
+			"type": "integer",
+			"description": "Age threshold in days for flagging inactive branches.",
+			"minimum": 0,
+			"default": 90
+		},
+		"divergedAheadCount": {
+			"type": "integer",
+			"description": "Minimum commits ahead of target for a branch to be considered significantly diverged.",
+			"minimum": 0,
+			"default": 10
+		},
+		"divergedBehindCount": {
+			"type": "integer",
+			"description": "Minimum commits behind target for a branch to be considered significantly diverged.",
+			"minimum": 0,
+			"default": 10
+		},
+		"branchExcludePatterns": {
+			"type": "array",
+			"description": "Branch name patterns to exclude from cleanup candidates. Supports * wildcards.",
+			"items": {
+				"type": "string",
+				"minLength": 1
+			},
+			"examples": [["wip/*", "experiment/*"]]
+		}
+	}
+}

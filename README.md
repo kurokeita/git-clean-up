@@ -101,6 +101,10 @@ Rules:
 - `.git-clean-up.json` extends built-in defaults for protected branches
 - Invalid config fails closed with a user-facing error
 
+A JSON Schema for `.git-clean-up.json` is available at
+[`config-schema.json`](config-schema.json). Add `"$schema": "config-schema.json"`
+to your config file for editor validation and autocomplete.
+
 ## Development
 
 ```bash
