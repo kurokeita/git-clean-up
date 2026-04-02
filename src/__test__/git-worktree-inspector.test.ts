@@ -1,4 +1,4 @@
-import { mkdir, rm, writeFile } from "node:fs/promises"
+import { mkdir, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { execa } from "execa"
@@ -20,17 +20,19 @@ describe("inspectWorktree", () => {
 	})
 
 	it("identifies a clean worktree", async () => {
-		vi.mocked(execa).mockImplementation((cmd, args) => {
-			if (args[0] === "status") {
-				return Promise.resolve({ stdout: "" }) as any
+		vi.mocked(execa).mockImplementation(async (_cmd, args) => {
+			const arg0 = args?.[0]
+			const arg3 = args?.[3]
+			if (arg0 === "status") {
+				return { stdout: "" } as never
 			}
-			if (args[0] === "rev-parse" && args[3] === "@{u}") {
-				return Promise.resolve({ stdout: "origin/feature" }) as any
+			if (arg0 === "rev-parse" && arg3 === "@{u}") {
+				return { stdout: "origin/feature" } as never
 			}
-			if (args[0] === "rev-list") {
-				return Promise.resolve({ stdout: "0" }) as any
+			if (arg0 === "rev-list") {
+				return { stdout: "0" } as never
 			}
-			return Promise.resolve({ stdout: "" }) as any
+			return { stdout: "" } as never
 		})
 
 		const insight = await inspectWorktree(testDir, "feature")
@@ -42,11 +44,11 @@ describe("inspectWorktree", () => {
 	})
 
 	it("identifies a dirty worktree", async () => {
-		vi.mocked(execa).mockImplementation((cmd, args) => {
-			if (args[0] === "status") {
-				return Promise.resolve({ stdout: " M modified.ts" }) as any
+		vi.mocked(execa).mockImplementation(async (_cmd, args) => {
+			if (args?.[0] === "status") {
+				return { stdout: " M modified.ts" } as never
 			}
-			return Promise.resolve({ stdout: "" }) as any
+			return { stdout: "" } as never
 		})
 
 		const insight = await inspectWorktree(testDir, "feature")
@@ -56,11 +58,11 @@ describe("inspectWorktree", () => {
 	})
 
 	it("identifies untracked files", async () => {
-		vi.mocked(execa).mockImplementation((cmd, args) => {
-			if (args[0] === "status") {
-				return Promise.resolve({ stdout: "?? new-file.ts" }) as any
+		vi.mocked(execa).mockImplementation(async (_cmd, args) => {
+			if (args?.[0] === "status") {
+				return { stdout: "?? new-file.ts" } as never
 			}
-			return Promise.resolve({ stdout: "" }) as any
+			return { stdout: "" } as never
 		})
 
 		const insight = await inspectWorktree(testDir, "feature")
@@ -70,17 +72,19 @@ describe("inspectWorktree", () => {
 	})
 
 	it("identifies unpushed commits", async () => {
-		vi.mocked(execa).mockImplementation((cmd, args) => {
-			if (args[0] === "status") {
-				return Promise.resolve({ stdout: "" }) as any
+		vi.mocked(execa).mockImplementation(async (_cmd, args) => {
+			const arg0 = args?.[0]
+			const arg3 = args?.[3]
+			if (arg0 === "status") {
+				return { stdout: "" } as never
 			}
-			if (args[0] === "rev-parse" && args[3] === "@{u}") {
-				return Promise.resolve({ stdout: "origin/feature" }) as any
+			if (arg0 === "rev-parse" && arg3 === "@{u}") {
+				return { stdout: "origin/feature" } as never
 			}
-			if (args[0] === "rev-list") {
-				return Promise.resolve({ stdout: "3" }) as any
+			if (arg0 === "rev-list") {
+				return { stdout: "3" } as never
 			}
-			return Promise.resolve({ stdout: "" }) as any
+			return { stdout: "" } as never
 		})
 
 		const insight = await inspectWorktree(testDir, "feature")
@@ -90,16 +94,16 @@ describe("inspectWorktree", () => {
 	})
 
 	it("identifies unreachable detached HEAD commits", async () => {
-		vi.mocked(execa).mockImplementation((cmd, args) => {
-			if (args[0] === "status") {
-				return Promise.resolve({ stdout: "" }) as any
+		vi.mocked(execa).mockImplementation(async (_cmd, args) => {
+			const arg0 = args?.[0]
+			const arg1 = args?.[1]
+			if (arg0 === "status") {
+				return { stdout: "" } as never
 			}
-			if (args[0] === "branch" && args[1] === "--contains") {
-				return Promise.resolve({
-					stdout: "* (HEAD detached at abc1234)",
-				}) as any
+			if (arg0 === "branch" && arg1 === "--contains") {
+				return { stdout: "* (HEAD detached at abc1234)" } as never
 			}
-			return Promise.resolve({ stdout: "" }) as any
+			return { stdout: "" } as never
 		})
 
 		const insight = await inspectWorktree(testDir, undefined, true)
@@ -111,16 +115,18 @@ describe("inspectWorktree", () => {
 	})
 
 	it("identifies reachable detached HEAD commits", async () => {
-		vi.mocked(execa).mockImplementation((cmd, args) => {
-			if (args[0] === "status") {
-				return Promise.resolve({ stdout: "" }) as any
+		vi.mocked(execa).mockImplementation(async (_cmd, args) => {
+			const arg0 = args?.[0]
+			const arg1 = args?.[1]
+			if (arg0 === "status") {
+				return { stdout: "" } as never
 			}
-			if (args[0] === "branch" && args[1] === "--contains") {
-				return Promise.resolve({
+			if (arg0 === "branch" && arg1 === "--contains") {
+				return {
 					stdout: "* (HEAD detached at abc1234)\n  main",
-				}) as any
+				} as never
 			}
-			return Promise.resolve({ stdout: "" }) as any
+			return { stdout: "" } as never
 		})
 
 		const insight = await inspectWorktree(testDir, undefined, true)

@@ -222,8 +222,11 @@ describe("E2E", () => {
 			)
 			// Should not reach here
 			expect(true).toBe(false)
-		} catch (error: any) {
-			exitCode = error.exitCode ?? error.code ?? 1
+		} catch (error: unknown) {
+			exitCode =
+				(error as { exitCode?: number }).exitCode ??
+				(error as { code?: number }).code ??
+				1
 		}
 		expect(exitCode).toBe(1)
 	})

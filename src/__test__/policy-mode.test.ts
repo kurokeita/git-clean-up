@@ -39,17 +39,19 @@ describe("CI / Policy Mode", () => {
 			JSON.stringify({ includeCategories: ["branch"] }),
 		)
 
-		vi.mocked(execa).mockImplementation((cmd, args) => {
-			if (args[0] === "rev-parse" && args[1] === "--show-toplevel") {
-				return Promise.resolve({ stdout: repoRoot }) as any
+		vi.mocked(execa).mockImplementation(async (_cmd, args) => {
+			const arg0 = args?.[0]
+			const arg1 = args?.[1]
+			if (arg0 === "rev-parse" && arg1 === "--show-toplevel") {
+				return { stdout: repoRoot } as never
 			}
-			if (args[0] === "symbolic-ref") {
-				return Promise.resolve({ stdout: "refs/heads/main" }) as any
+			if (arg0 === "symbolic-ref") {
+				return { stdout: "refs/heads/main" } as never
 			}
-			if (args[0] === "rev-parse" && args[1] === "--verify") {
-				return Promise.resolve({}) as any
+			if (arg0 === "rev-parse" && arg1 === "--verify") {
+				return {} as never
 			}
-			return Promise.resolve({ stdout: "" }) as any
+			return { stdout: "" } as never
 		})
 	})
 
@@ -94,16 +96,17 @@ describe("CI / Policy Mode", () => {
 
 		// We need some findings to trigger the failure.
 		// Let's mock git branch to return a "merged" branch.
-		vi.mocked(execa).mockImplementation((cmd, args) => {
-			if (args[0] === "rev-parse" && args[1] === "--show-toplevel")
-				return Promise.resolve({ stdout: repoRoot }) as any
-			if (args[0] === "branch" && args[1] === "--merged")
-				return Promise.resolve({ stdout: "  feature-merged" }) as any
-			if (args[0] === "worktree" && args[1] === "list")
-				return Promise.resolve({ stdout: "path/to/repo main" }) as any
-			if (args[0] === "for-each-ref")
-				return Promise.resolve({ stdout: "" }) as any
-			return Promise.resolve({ stdout: "" }) as any
+		vi.mocked(execa).mockImplementation(async (_cmd, args) => {
+			const arg0 = args?.[0]
+			const arg1 = args?.[1]
+			if (arg0 === "rev-parse" && arg1 === "--show-toplevel")
+				return { stdout: repoRoot } as never
+			if (arg0 === "branch" && arg1 === "--merged")
+				return { stdout: "  feature-merged" } as never
+			if (arg0 === "worktree" && arg1 === "list")
+				return { stdout: "path/to/repo main" } as never
+			if (arg0 === "for-each-ref") return { stdout: "" } as never
+			return { stdout: "" } as never
 		})
 
 		await runApp()
