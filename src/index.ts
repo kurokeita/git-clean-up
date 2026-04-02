@@ -34,6 +34,32 @@ async function collectFindings(
 	return findings
 }
 
+function checkPolicyViolation(
+	findings: CleanupFinding[],
+	options: ScanOptions,
+): boolean {
+	if (
+		options.maxFindings !== undefined &&
+		findings.length > options.maxFindings
+	) {
+		return true
+	}
+
+	if (options.failOn) {
+		const riskLevels: CleanupRisk[] = ["low", "medium", "high"]
+		const thresholdIndex = riskLevels.indexOf(options.failOn)
+
+		for (const finding of findings) {
+			const findingIndex = riskLevels.indexOf(finding.risk)
+			if (findingIndex >= thresholdIndex) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
 async function runInteractiveScanLoop(
 	gitService: GitService,
 	cleanupExecutor: CleanupExecutor,
@@ -264,20 +290,32 @@ export async function runApp() {
 		targetBranch ??= await gitService.getDefaultBranch()
 		const scanOptions: ScanOptions = {
 			ageDays: parsedCommand.options.ageDays ?? policy.stashAgeDays,
+			failOn: parsedCommand.options.failOn as CleanupRisk,
 			include: parsedCommand.options.include ?? policy.includeCategories,
+			maxFindings: parsedCommand.options.maxFindings,
 			policy,
+			summary: parsedCommand.options.summary,
 			targetBranch,
 		}
 		const findings = await collectFindings(gitService, scanOptions)
 		s.stop("Scan complete")
 
-		if (findings.length === 0) {
-			ui.showDone("Your workspace is already clean! 🎉")
+		if (scanOptions.summary || parsedCommand.options.json) {
+			if (scanOptions.summary) {
+				ui.showSummary(findings)
+			}
+			if (parsedCommand.options.json) {
+				console.log(ui.serializeFindings(findings))
+			}
+
+			if (checkPolicyViolation(findings, scanOptions)) {
+				process.exit(1)
+			}
 			return
 		}
 
-		if (parsedCommand.options.json) {
-			console.log(ui.serializeFindings(findings))
+		if (findings.length === 0) {
+			ui.showDone("Your workspace is already clean! 🎉")
 			return
 		}
 

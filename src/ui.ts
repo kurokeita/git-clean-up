@@ -324,6 +324,21 @@ export async function confirmDeletion(count: number): Promise<boolean> {
 	return confirmed as boolean
 }
 
+export function showSummary(findings: CleanupFinding[]) {
+	const high = findings.filter((f) => f.risk === "high").length
+	const medium = findings.filter((f) => f.risk === "medium").length
+	const low = findings.filter((f) => f.risk === "low").length
+
+	const parts = [
+		`Total findings: ${findings.length}`,
+		high > 0 ? color.red(`${high} high risk`) : "",
+		medium > 0 ? color.yellow(`${medium} medium risk`) : "",
+		low > 0 ? color.blue(`${low} low risk`) : "",
+	].filter(Boolean)
+
+	p.note(parts.join(" · "), "Scan Summary")
+}
+
 export function createSpinner() {
 	return p.spinner()
 }

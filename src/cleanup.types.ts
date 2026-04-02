@@ -73,4 +73,7 @@ export interface ScanOptions {
 	ageDays: number
 	include: CleanupCategory[]
 	policy?: ResolvedCleanupPolicy
+	summary?: boolean
+	failOn?: CleanupRisk
+	maxFindings?: number
 }

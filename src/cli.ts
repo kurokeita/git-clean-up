@@ -9,6 +9,9 @@ export interface CliOptions {
 	apply: boolean
 	ageDays?: number
 	all: boolean
+	summary: boolean
+	failOn?: string
+	maxFindings?: number
 }
 
 export interface ParsedCommand {
@@ -51,6 +54,9 @@ function collectOptions(options: {
 	apply?: boolean
 	ageDays?: number
 	all?: boolean
+	summary?: boolean
+	failOn?: string
+	maxFindings?: number
 }): CliOptions {
 	return {
 		ageDays:
@@ -59,8 +65,14 @@ function collectOptions(options: {
 				: options.ageDays,
 		all: options.all ?? false,
 		apply: options.apply ?? false,
+		failOn: options.failOn,
 		include: parseInclude(options.include),
 		json: options.json ?? false,
+		maxFindings:
+			typeof options.maxFindings === "string"
+				? Number(options.maxFindings)
+				: options.maxFindings,
+		summary: options.summary ?? false,
 		target: options.target,
 	}
 }
@@ -79,6 +91,16 @@ function addSharedOptions(command: Command): Command {
 			(value) => Number(value),
 		)
 		.option("-a, --all", "Select all findings without interaction", false)
+		.option("--summary", "Output a concise summary of findings", false)
+		.option(
+			"--fail-on <risk>",
+			"Fail (exit 1) if findings with this risk level or higher are found (low, medium, high)",
+		)
+		.option(
+			"--max-findings <number>",
+			"Fail (exit 1) if total findings exceed this number",
+			(value) => Number(value),
+		)
 }
 
 export function createCli() {
