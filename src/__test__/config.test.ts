@@ -144,7 +144,7 @@ describe("config", () => {
 		).toThrow("includeCategories contains unsupported category: invalid")
 	})
 
-	it("parses defaultTargetBranch as a non-empty string", () => {
+	it("parses defaultTargetBranch as a string, allowing empty", () => {
 		expect(
 			parseCleanupPolicy({
 				defaultTargetBranch: "origin/main",
@@ -153,11 +153,13 @@ describe("config", () => {
 			defaultTargetBranch: "origin/main",
 		})
 
-		expect(() =>
+		expect(
 			parseCleanupPolicy({
 				defaultTargetBranch: "",
 			}),
-		).toThrow("defaultTargetBranch must be a non-empty string")
+		).toEqual({
+			defaultTargetBranch: "",
+		})
 	})
 
 	it("resolves overrides without losing built-in protected branches", () => {

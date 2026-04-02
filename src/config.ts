@@ -81,9 +81,9 @@ function ensurePositiveInteger(value: unknown, key: string): number {
 	return value as number
 }
 
-function ensureOptionalString(value: unknown, key: string): string {
-	if (typeof value !== "string" || value.trim() === "") {
-		throw new Error(`${key} must be a non-empty string`)
+function ensureOptionalString(value: unknown, _key: string): string {
+	if (typeof value !== "string") {
+		return ""
 	}
 
 	return value.trim()
