@@ -51,7 +51,6 @@ export interface CleanupFinding {
 	fixable: boolean
 	cleanupAction: CleanupAction
 	details?: CleanupFindingDetails
-	restoreKey?: string
 }
 
 export interface ScanOptions {
