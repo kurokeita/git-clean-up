@@ -145,10 +145,9 @@ describe("runApp", () => {
 				includeCategories: ["branch", "stash", "worktree"],
 				protectedBranches: ["main", "master", "develop", "dev"],
 				stashAgeDays: 30,
+				skipPrune: false,
 			},
 		})
-		gitServiceMock.getRepositoryRoot.mockResolvedValue(process.cwd())
-		gitServiceMock.pruneRemotes.mockResolvedValue(undefined)
 		gitServiceMock.branchRefExists = vi.fn().mockResolvedValue(true)
 		gitServiceMock.getDefaultBranch.mockResolvedValue("origin/main")
 		gitServiceMock.getBranchFindings.mockResolvedValue([])
@@ -267,6 +266,7 @@ describe("runApp", () => {
 					includeCategories: ["branch"],
 					protectedBranches: ["main", "master", "develop", "dev"],
 					stashAgeDays: 30,
+					skipPrune: false,
 				},
 			})
 			.mockResolvedValueOnce({
@@ -280,6 +280,7 @@ describe("runApp", () => {
 					includeCategories: ["branch"],
 					protectedBranches: ["main", "master", "develop", "dev"],
 					stashAgeDays: 30,
+					skipPrune: false,
 				},
 			})
 
