@@ -33,7 +33,10 @@ import {
 	formatVersionBanner,
 	getCategoryOptions,
 	groupFindingsByCategory,
+	promptForConfigScopeChoice,
 	promptForUpdate,
+	promptToCreateConfig,
+	promptToRepairDefaultTargetBranch,
 	serializeFindings,
 	showWelcome,
 } from "../ui"
@@ -85,10 +88,37 @@ describe("ui helpers", () => {
 		)
 	})
 
+	it("formats structured finding details without changing the JSON payload", () => {
+		const label = formatFindingLabel(
+			finding({
+				details: {
+					aheadCount: 1,
+					behindCount: 12,
+					lastCommitAgeDays: 45,
+					lastCommitAuthor: "Test User",
+					upstream: "origin/feature/demo",
+				},
+			}),
+		)
+
+		expect(label).toContain("45d old")
+		expect(label).toContain("behind 12 / ahead 1")
+		expect(label).toContain("origin/feature/demo")
+		expect(label).toContain("Test User")
+	})
+
 	it("serializes findings for json output", () => {
-		const output = serializeFindings([finding({ category: "worktree" })])
+		const output = serializeFindings([
+			finding({
+				category: "worktree",
+				details: {
+					safetyWarnings: ["Has unpushed commits"],
+				},
+			}),
+		])
 		expect(output).toContain('"category": "worktree"')
 		expect(output).toContain('"fixable": true')
+		expect(output).toContain('"safetyWarnings"')
 	})
 
 	it("builds category options from grouped findings", () => {
@@ -132,5 +162,52 @@ describe("ui helpers", () => {
 		expect(promptsMock.confirm).toHaveBeenCalledTimes(1)
 		expect(promptsMock.confirm.mock.calls[0]?.[0].message).toContain("1.2.1")
 		expect(promptsMock.confirm.mock.calls[0]?.[0].message).toContain("1.3.0")
+	})
+
+	it("prompts to create a config file at a given scope", async () => {
+		promptsMock.confirm.mockResolvedValue(true)
+
+		await expect(
+			promptToCreateConfig("global", "/home/test/.git-clean-up.json"),
+		).resolves.toBe(true)
+		expect(promptsMock.confirm.mock.calls[0]?.[0].message).toContain("global")
+		expect(promptsMock.confirm.mock.calls[0]?.[0].message).toContain(
+			"/home/test/.git-clean-up.json",
+		)
+	})
+
+	it("prompts to choose between the global config and creating a local one", async () => {
+		promptsMock.select.mockResolvedValue("local")
+
+		await expect(
+			promptForConfigScopeChoice(
+				"/home/test/.git-clean-up.json",
+				"/repo/.git-clean-up.json",
+			),
+		).resolves.toBe("local")
+		expect(promptsMock.select.mock.calls[0]?.[0].message).toContain(
+			"/home/test/.git-clean-up.json",
+		)
+		expect(promptsMock.select.mock.calls[0]?.[0].message).toContain(
+			"/repo/.git-clean-up.json",
+		)
+	})
+
+	it("prompts to repair an invalid configured target branch", async () => {
+		promptsMock.select.mockResolvedValue("use-detected-default")
+
+		await expect(
+			promptToRepairDefaultTargetBranch({
+				configPath: "/repo/.git-clean-up.json",
+				configuredTargetBranch: "missing-branch",
+				detectedTargetBranch: "origin/main",
+			}),
+		).resolves.toBe("use-detected-default")
+		expect(promptsMock.select.mock.calls[0]?.[0].message).toContain(
+			"missing-branch",
+		)
+		expect(promptsMock.select.mock.calls[0]?.[0].message).toContain(
+			"origin/main",
+		)
 	})
 })

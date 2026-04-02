@@ -40,13 +40,16 @@ describe(GitService.name, () => {
 	})
 
 	describe("getBranchFindings", () => {
-		it("returns merged, gone, missing-upstream, and long-diverged branches", async () => {
+		it("returns merged, gone, missing-upstream, and long-diverged branches with metadata", async () => {
 			vi.mocked(execa).mockImplementation((_cmd, args) => {
 				const actualArgs = args as string[]
 				if (actualArgs[0] === "branch" && actualArgs[1] === "--merged") {
 					return Promise.resolve(mockResult("  feature-merged\n"))
 				}
-				if (actualArgs[0] === "for-each-ref") {
+				if (
+					actualArgs[0] === "for-each-ref" &&
+					actualArgs[1] === "--format=%(refname:short) %(upstream:track)"
+				) {
 					return Promise.resolve(
 						mockResult(
 							[
@@ -58,8 +61,56 @@ describe(GitService.name, () => {
 						),
 					)
 				}
+				if (
+					actualArgs[0] === "for-each-ref" &&
+					actualArgs[1] === "--format=%(refname:short) %(upstream:short)" &&
+					actualArgs[2] === "refs/heads"
+				) {
+					return Promise.resolve(
+						mockResult(
+							[
+								"feature-gone [gone]",
+								"feature-no-upstream ",
+								"main origin/main",
+								"feature-diverged origin/feature-diverged",
+								"feature-merged origin/feature-merged",
+							].join("\n"),
+						),
+					)
+				}
+				if (
+					actualArgs[0] === "for-each-ref" &&
+					actualArgs[1] === "--format=%(refname:short)"
+				) {
+					return Promise.resolve(
+						mockResult(
+							[
+								"feature-merged",
+								"feature-gone",
+								"feature-no-upstream",
+								"feature-diverged",
+								"main",
+							].join("\n"),
+						),
+					)
+				}
+				if (
+					actualArgs[0] === "for-each-ref" &&
+					actualArgs[1] === "--format=%(upstream:short)"
+				) {
+					const branch = actualArgs[2]?.replace("refs/heads/", "")
+					const upstreamMap: Record<string, string> = {
+						"feature-diverged": "origin/feature-diverged",
+						"feature-gone": "origin/feature-gone",
+						"feature-merged": "origin/feature-merged",
+					}
+					return Promise.resolve(mockResult(upstreamMap[branch ?? ""] ?? ""))
+				}
 				if (actualArgs[0] === "worktree") {
 					return Promise.resolve(mockResult("branch refs/heads/main\n"))
+				}
+				if (actualArgs[0] === "log") {
+					return Promise.resolve(mockResult("1700000000|Test User"))
 				}
 				if (actualArgs[0] === "cherry") {
 					return Promise.resolve(mockResult("+ commit"))
@@ -71,7 +122,18 @@ describe(GitService.name, () => {
 					return Promise.resolve(mockResult("tmp-sha"))
 				}
 				if (actualArgs[0] === "rev-list") {
-					return Promise.resolve(mockResult("18\t14"))
+					if (actualArgs[3] === "main...feature-diverged") {
+						return Promise.resolve(mockResult("18\t14"))
+					}
+					if (actualArgs[3] === "main...feature-merged") {
+						return Promise.resolve(mockResult("0\t0"))
+					}
+					if (actualArgs[3] === "main...feature-gone") {
+						return Promise.resolve(mockResult("5\t1"))
+					}
+					if (actualArgs[3] === "main...feature-no-upstream") {
+						return Promise.resolve(mockResult("2\t0"))
+					}
 				}
 				return Promise.resolve(mockResult(""))
 			})
@@ -87,6 +149,19 @@ describe(GitService.name, () => {
 					"branch:feature-gone:gone",
 					"branch:feature-no-upstream:no-upstream",
 					"branch:feature-diverged:long-diverged",
+				]),
+			)
+			expect(findings).toEqual(
+				expect.arrayContaining([
+					expect.objectContaining({
+						id: "branch:feature-diverged:long-diverged",
+						details: expect.objectContaining({
+							aheadCount: 14,
+							behindCount: 18,
+							lastCommitAuthor: "Test User",
+							upstream: "origin/feature-diverged",
+						}),
+					}),
 				]),
 			)
 		})
@@ -163,6 +238,105 @@ describe(GitService.name, () => {
 			})
 
 			expect(findings).toEqual([])
+		})
+
+		it("adds inactive branch findings when an old branch is behind the target", async () => {
+			const oldTimestamp = Math.floor(Date.now() / 1000) - 60 * 60 * 24 * 120
+
+			vi.mocked(execa).mockImplementation((_cmd, args) => {
+				const actualArgs = args as string[]
+				if (actualArgs[0] === "branch" && actualArgs[1] === "--merged") {
+					return Promise.resolve(mockResult(""))
+				}
+				if (
+					actualArgs[0] === "for-each-ref" &&
+					actualArgs[1] === "--format=%(refname:short) %(upstream:track)"
+				) {
+					return Promise.resolve(mockResult("main [gone]"))
+				}
+				if (
+					actualArgs[0] === "for-each-ref" &&
+					actualArgs[1] === "--format=%(refname:short) %(upstream:short)" &&
+					actualArgs[2] === "refs/heads"
+				) {
+					return Promise.resolve(
+						mockResult(
+							"feature-inactive origin/feature-inactive\nmain origin/main",
+						),
+					)
+				}
+				if (
+					actualArgs[0] === "for-each-ref" &&
+					actualArgs[1] === "--format=%(refname:short)"
+				) {
+					return Promise.resolve(mockResult("feature-inactive\nmain"))
+				}
+				if (
+					actualArgs[0] === "for-each-ref" &&
+					actualArgs[1] === "--format=%(upstream:short)"
+				) {
+					const branch = actualArgs[2]?.replace("refs/heads/", "")
+					return Promise.resolve(
+						mockResult(
+							branch === "feature-inactive" ? "origin/feature-inactive" : "",
+						),
+					)
+				}
+				if (actualArgs[0] === "worktree") {
+					return Promise.resolve(mockResult("branch refs/heads/main\n"))
+				}
+				if (actualArgs[0] === "log") {
+					return Promise.resolve(mockResult(`${oldTimestamp}|Test User`))
+				}
+				if (actualArgs[0] === "rev-list") {
+					if (actualArgs[3] === "main...feature-inactive") {
+						return Promise.resolve(mockResult("12\t0"))
+					}
+					return Promise.resolve(mockResult("0\t0"))
+				}
+				if (
+					actualArgs[0] === "merge-base" ||
+					actualArgs[0] === "rev-parse" ||
+					actualArgs[0] === "commit-tree" ||
+					actualArgs[0] === "cherry"
+				) {
+					return Promise.resolve(mockResult(""))
+				}
+
+				return Promise.resolve(mockResult(""))
+			})
+
+			const findings = await gitService.getBranchFindings({
+				ageDays: 30,
+				policy: {
+					branchExcludePatterns: [],
+					branchInactiveDays: 30,
+					divergedAheadCount: 10,
+					divergedBehindCount: 10,
+					includeCategories: ["branch", "stash", "worktree"],
+					protectedBranches: ["main", "master", "develop", "dev"],
+					stashAgeDays: 30,
+				},
+				targetBranch: "main",
+			})
+
+			expect(findings).toEqual(
+				expect.arrayContaining([
+					expect.objectContaining({
+						id: "branch:feature-inactive:inactive",
+						fixable: true,
+						risk: "medium",
+						reason: "Inactive for 120 days and behind main",
+						details: expect.objectContaining({
+							aheadCount: 0,
+							behindCount: 12,
+							lastCommitAgeDays: 120,
+							lastCommitAuthor: "Test User",
+							upstream: "origin/feature-inactive",
+						}),
+					}),
+				]),
+			)
 		})
 	})
 

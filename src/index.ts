@@ -1,12 +1,25 @@
 #!/usr/bin/env node
 import { pathToFileURL } from "node:url"
-import type { CleanupFinding, ScanOptions } from "./cleanup.types"
+import color from "picocolors"
+import type { CleanupFinding, CleanupRisk, ScanOptions } from "./cleanup.types"
 import { CleanupExecutor } from "./cleanup-executor"
 import { createCli } from "./cli"
+import {
+	getGlobalConfigPath,
+	getLocalConfigPath,
+	initializeCleanupPolicyConfig,
+	loadCleanupPolicy,
+	updateCleanupPolicyFile,
+	waitForConfigChange,
+} from "./config"
 import { GitService } from "./git.service"
 import * as ui from "./ui"
 import { APP_NAME, checkForUpdates, installUpdate } from "./version"
 
+/**
+ * Collects all cleanup findings from enabled categories.
+ * Runs branch, stash, and worktree detection in parallel where possible.
+ */
 async function collectFindings(
 	gitService: GitService,
 	options: ScanOptions,
@@ -24,6 +37,36 @@ async function collectFindings(
 	}
 
 	return findings
+}
+
+/**
+ * Checks if findings violate policy thresholds (maxFindings, failOn).
+ * Used for CI mode to determine exit code.
+ */
+function checkPolicyViolation(
+	findings: CleanupFinding[],
+	options: ScanOptions,
+): boolean {
+	if (
+		options.maxFindings !== undefined &&
+		findings.length > options.maxFindings
+	) {
+		return true
+	}
+
+	if (options.failOn) {
+		const riskLevels: CleanupRisk[] = ["low", "medium", "high"]
+		const thresholdIndex = riskLevels.indexOf(options.failOn)
+
+		for (const finding of findings) {
+			const findingIndex = riskLevels.indexOf(finding.risk)
+			if (findingIndex >= thresholdIndex) {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 async function runInteractiveScanLoop(
@@ -49,11 +92,29 @@ async function runInteractiveScanLoop(
 		)
 		ui.showNote(categoryFindings.map(ui.formatFindingLabel).join("\n"))
 
-		const selectedFindings = await ui.selectFindings(
-			categoryFindings.filter((finding) => finding.fixable),
-		)
+		// Show all findings (including non-fixable) so user can select them
+		// User will be warned if they try to clean non-fixable ones
+		const selectedFindings = await ui.selectFindings(categoryFindings)
 		if (selectedFindings.length === 0) {
 			continue
+		}
+
+		// Check if any non-fixable findings were selected and warn
+		const nonFixableSelected = selectedFindings.filter((f) => !f.fixable)
+		if (nonFixableSelected.length > 0) {
+			const warningMessage = [
+				color.red(
+					"⚠ Warning: You have selected branches that cannot be automatically cleaned:",
+				),
+				"",
+				...nonFixableSelected.map(
+					(f) => `  ${color.red("✖")} ${f.title} - ${f.reason}`,
+				),
+				"",
+				"These branches have unpushed commits that would be permanently lost if deleted.",
+				"You must manually handle these branches outside of this tool.",
+			].join("\n")
+			ui.showNote(warningMessage)
 		}
 
 		const selectedAction = await ui.selectFindingAction(selectedFindings.length)
@@ -87,6 +148,10 @@ async function runInteractiveScanLoop(
 	}
 }
 
+/**
+ * Runs the CLI entrypoint: parse args, resolve policy, optionally guide config setup,
+ * validate target branch selection, then execute scan or clean behavior.
+ */
 export async function runApp() {
 	const cli = createCli()
 	cli.program.parse()
@@ -96,7 +161,10 @@ export async function runApp() {
 		throw new Error("No command was parsed")
 	}
 
-	if (!parsedCommand.options.json) {
+	const isCi =
+		process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true"
+
+	if (!parsedCommand.options.json && !isCi) {
 		const updateInfo = await checkForUpdates()
 
 		if (updateInfo) {
@@ -127,42 +195,167 @@ export async function runApp() {
 
 	const gitService = new GitService()
 	const cleanupExecutor = new CleanupExecutor()
-	const s = parsedCommand.options.json
-		? {
-				message(_message: string) {},
-				start(_message: string) {},
-				stop(_message: string, _code?: number) {},
+	const s =
+		parsedCommand.options.json || isCi
+			? {
+					message(_message: string) {},
+					start(_message: string) {},
+					stop(_message: string, _code?: number) {},
+				}
+			: ui.createSpinner()
+	const shouldPromptForConfigSetup =
+		!parsedCommand.options.json && !isCi && parsedCommand.mode === "scan"
+
+	try {
+		s.start("Loading cleanup policy...")
+		const repositoryRoot = await gitService.getRepositoryRoot()
+		let loadedPolicy = await loadCleanupPolicy(repositoryRoot)
+
+		if (
+			shouldPromptForConfigSetup &&
+			!loadedPolicy.localConfigPath &&
+			!loadedPolicy.globalConfigPath
+		) {
+			const globalConfigPath = getGlobalConfigPath()
+			if (await ui.promptToCreateConfig("global", globalConfigPath)) {
+				await initializeCleanupPolicyConfig(globalConfigPath)
+				loadedPolicy = await loadCleanupPolicy(repositoryRoot)
 			}
-		: ui.createSpinner()
+		}
 
-	s.start("Pruning remotes...")
-	try {
-		await gitService.pruneRemotes()
-		s.stop("Remotes pruned")
-	} catch (_error) {
-		s.stop("Failed to prune remotes", 1)
-	}
+		if (
+			shouldPromptForConfigSetup &&
+			!loadedPolicy.localConfigPath &&
+			loadedPolicy.globalConfigPath
+		) {
+			const choice = await ui.promptForConfigScopeChoice(
+				loadedPolicy.globalConfigPath,
+				getLocalConfigPath(repositoryRoot),
+			)
 
-	s.start("Scanning branches...")
+			if (choice === "exit") {
+				ui.showCancel("Cleanup cancelled")
+				return
+			}
 
-	try {
-		const targetBranch =
-			parsedCommand.options.target ?? (await gitService.getDefaultBranch())
+			if (choice === "local") {
+				await initializeCleanupPolicyConfig(
+					getLocalConfigPath(repositoryRoot),
+					loadedPolicy.policy,
+				)
+				loadedPolicy = await loadCleanupPolicy(repositoryRoot)
+			}
+		}
+
+		let targetBranch = parsedCommand.options.target
+		const cliSkipPrune = parsedCommand.options.skipPrune
+		const shouldPrune =
+			!(cliSkipPrune ?? loadedPolicy.policy.skipPrune) && !targetBranch
+
+		if (shouldPrune) {
+			s.start("Pruning remotes...")
+			try {
+				await gitService.pruneRemotes()
+				s.stop("Remotes pruned")
+			} catch (_error) {
+				s.stop("Failed to prune remotes", 1)
+			}
+		} else {
+			s.stop("Cleanup policy loaded")
+		}
+
+		s.start("Scanning branches...")
+
+		let policy = loadedPolicy.policy
+
+		if (!targetBranch && policy.defaultTargetBranch) {
+			let configuredTargetBranch = policy.defaultTargetBranch
+
+			for (;;) {
+				if (
+					configuredTargetBranch !== "" &&
+					(await gitService.branchRefExists(configuredTargetBranch))
+				) {
+					targetBranch = configuredTargetBranch
+					break
+				}
+
+				const detectedTargetBranch = await gitService.getDefaultBranch()
+				if (
+					!shouldPromptForConfigSetup ||
+					!loadedPolicy.defaultTargetBranchSourcePath
+				) {
+					if (configuredTargetBranch !== "") {
+						throw new Error(
+							`Configured defaultTargetBranch \`${configuredTargetBranch}\` from ${loadedPolicy.defaultTargetBranchSourcePath ?? "config"} does not exist.`,
+						)
+					}
+					targetBranch = detectedTargetBranch
+					break
+				}
+
+				const repairAction = await ui.promptToRepairDefaultTargetBranch({
+					configPath: loadedPolicy.defaultTargetBranchSourcePath,
+					configuredTargetBranch,
+					detectedTargetBranch,
+				})
+
+				if (repairAction === "exit") {
+					ui.showCancel("Cleanup cancelled")
+					return
+				}
+
+				if (repairAction === "use-detected-default") {
+					await updateCleanupPolicyFile(
+						loadedPolicy.defaultTargetBranchSourcePath,
+						{ defaultTargetBranch: detectedTargetBranch },
+					)
+					targetBranch = detectedTargetBranch
+					break
+				}
+
+				ui.showNote(
+					`Waiting for ${loadedPolicy.defaultTargetBranchSourcePath} to be updated...`,
+				)
+				await waitForConfigChange(loadedPolicy.defaultTargetBranchSourcePath)
+				loadedPolicy = await loadCleanupPolicy(repositoryRoot)
+				policy = loadedPolicy.policy
+				configuredTargetBranch = loadedPolicy.policy.defaultTargetBranch ?? ""
+			}
+		}
+
+		targetBranch ??= await gitService.getDefaultBranch()
 		const scanOptions: ScanOptions = {
-			ageDays: parsedCommand.options.ageDays,
-			include: parsedCommand.options.include,
+			ageDays: parsedCommand.options.ageDays ?? policy.stashAgeDays,
+			failOn: parsedCommand.options.failOn as CleanupRisk,
+			include: parsedCommand.options.include ?? policy.includeCategories,
+			maxFindings: parsedCommand.options.maxFindings,
+			policy,
+			summary: parsedCommand.options.summary,
 			targetBranch,
 		}
 		const findings = await collectFindings(gitService, scanOptions)
 		s.stop("Scan complete")
 
-		if (findings.length === 0) {
-			ui.showDone("Your workspace is already clean! 🎉")
-			return
+		if (scanOptions.summary || parsedCommand.options.json || isCi) {
+			if (scanOptions.summary) {
+				ui.showSummary(findings)
+			}
+			if (parsedCommand.options.json) {
+				console.log(ui.serializeFindings(findings))
+			}
+
+			if (checkPolicyViolation(findings, scanOptions)) {
+				process.exit(1)
+			}
+
+			if (scanOptions.summary || parsedCommand.options.json) {
+				return
+			}
 		}
 
-		if (parsedCommand.options.json) {
-			console.log(ui.serializeFindings(findings))
+		if (findings.length === 0) {
+			ui.showDone("Your workspace is already clean! 🎉")
 			return
 		}
 
@@ -221,8 +414,12 @@ if (
 	process.argv[1] &&
 	import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
-	runApp().catch((err) => {
-		console.error(err)
-		process.exit(1)
-	})
+	runApp()
+		.then(() => {
+			process.exit(0)
+		})
+		.catch((err) => {
+			console.error(err)
+			process.exit(1)
+		})
 }

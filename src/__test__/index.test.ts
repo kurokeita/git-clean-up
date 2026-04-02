@@ -8,6 +8,9 @@ const uiMock = vi.hoisted(() => ({
 		stop: vi.fn(),
 	})),
 	formatFindingLabel: vi.fn((finding) => finding.title),
+	promptForConfigScopeChoice: vi.fn(),
+	promptToCreateConfig: vi.fn(),
+	promptToRepairDefaultTargetBranch: vi.fn(),
 	promptForUpdate: vi.fn(),
 	selectFindingAction: vi.fn(),
 	selectFindingCategory: vi.fn(),
@@ -31,8 +34,10 @@ const cliMock = vi.hoisted(() => ({
 }))
 
 const gitServiceMock = vi.hoisted(() => ({
+	branchRefExists: vi.fn(),
 	getDefaultBranch: vi.fn(),
 	getBranchFindings: vi.fn(),
+	getRepositoryRoot: vi.fn(),
 	getStashFindings: vi.fn(),
 	getWorktreeFindings: vi.fn(),
 	pruneRemotes: vi.fn(),
@@ -41,6 +46,15 @@ const gitServiceMock = vi.hoisted(() => ({
 const cleanupExecutorMock = vi.hoisted(() => ({
 	previewCommands: vi.fn(),
 	run: vi.fn(),
+}))
+
+const configMock = vi.hoisted(() => ({
+	getGlobalConfigPath: vi.fn(),
+	getLocalConfigPath: vi.fn(),
+	initializeCleanupPolicyConfig: vi.fn(),
+	loadCleanupPolicy: vi.fn(),
+	updateCleanupPolicyFile: vi.fn(),
+	waitForConfigChange: vi.fn(),
 }))
 
 vi.mock("../ui", () => uiMock)
@@ -56,6 +70,7 @@ vi.mock("../version", async () => {
 vi.mock("../cli", () => ({
 	createCli: () => cliMock,
 }))
+vi.mock("../config", () => configMock)
 vi.mock("../git.service", () => ({
 	GitService: vi.fn(function GitServiceMock() {
 		return gitServiceMock
@@ -77,10 +92,21 @@ describe("runApp", () => {
 		uiMock.showCancel.mockReset()
 		uiMock.showNote.mockReset()
 		uiMock.promptForUpdate.mockReset()
+		uiMock.promptForConfigScopeChoice.mockReset()
+		uiMock.promptToCreateConfig.mockReset()
+		uiMock.promptToRepairDefaultTargetBranch.mockReset()
 		uiMock.createSpinner.mockClear()
 		versionMock.checkForUpdates.mockReset()
 		versionMock.installUpdate.mockReset()
+		configMock.getGlobalConfigPath.mockReset()
+		configMock.getLocalConfigPath.mockReset()
+		configMock.initializeCleanupPolicyConfig.mockReset()
+		configMock.loadCleanupPolicy.mockReset()
+		configMock.updateCleanupPolicyFile.mockReset()
+		configMock.waitForConfigChange.mockReset()
 		gitServiceMock.pruneRemotes.mockReset()
+		gitServiceMock.branchRefExists?.mockReset?.()
+		gitServiceMock.getRepositoryRoot.mockReset()
 		gitServiceMock.getDefaultBranch.mockReset()
 		gitServiceMock.getBranchFindings.mockReset()
 		gitServiceMock.getStashFindings.mockReset()
@@ -100,7 +126,30 @@ describe("runApp", () => {
 			},
 		})
 		versionMock.checkForUpdates.mockResolvedValue(null)
+		uiMock.promptForConfigScopeChoice.mockResolvedValue("global")
+		uiMock.promptToCreateConfig.mockResolvedValue(false)
+		uiMock.promptToRepairDefaultTargetBranch.mockResolvedValue("exit")
+		configMock.getGlobalConfigPath.mockReturnValue(
+			"/home/test/.git-clean-up.json",
+		)
+		configMock.getLocalConfigPath.mockReturnValue(
+			`${process.cwd()}/.git-clean-up.json`,
+		)
+		configMock.loadCleanupPolicy.mockResolvedValue({
+			policy: {
+				branchExcludePatterns: [],
+				branchInactiveDays: 90,
+				defaultTargetBranch: undefined,
+				divergedAheadCount: 10,
+				divergedBehindCount: 10,
+				includeCategories: ["branch", "stash", "worktree"],
+				protectedBranches: ["main", "master", "develop", "dev"],
+				stashAgeDays: 30,
+			},
+		})
+		gitServiceMock.getRepositoryRoot.mockResolvedValue(process.cwd())
 		gitServiceMock.pruneRemotes.mockResolvedValue(undefined)
+		gitServiceMock.branchRefExists = vi.fn().mockResolvedValue(true)
 		gitServiceMock.getDefaultBranch.mockResolvedValue("origin/main")
 		gitServiceMock.getBranchFindings.mockResolvedValue([])
 		gitServiceMock.getStashFindings.mockResolvedValue([])
@@ -112,11 +161,13 @@ describe("runApp", () => {
 		await runApp()
 
 		expect(gitServiceMock.getDefaultBranch).toHaveBeenCalledTimes(1)
-		expect(gitServiceMock.getBranchFindings).toHaveBeenCalledWith({
-			ageDays: 30,
-			include: ["branch"],
-			targetBranch: "origin/main",
-		})
+		expect(gitServiceMock.getBranchFindings).toHaveBeenCalledWith(
+			expect.objectContaining({
+				ageDays: 30,
+				include: ["branch"],
+				targetBranch: "origin/main",
+			}),
+		)
 	})
 
 	it("prompts for an update before showing the welcome screen", async () => {
@@ -201,5 +252,335 @@ describe("runApp", () => {
 		expect(uiMock.showDone).toHaveBeenCalledWith(
 			"Your workspace is already clean! 🎉",
 		)
+	})
+
+	it("prompts to initialize a global config when no config files exist", async () => {
+		uiMock.promptToCreateConfig = vi.fn().mockResolvedValue(true)
+		configMock.loadCleanupPolicy
+			.mockResolvedValueOnce({
+				policy: {
+					branchExcludePatterns: [],
+					branchInactiveDays: 90,
+					defaultTargetBranch: undefined,
+					divergedAheadCount: 10,
+					divergedBehindCount: 10,
+					includeCategories: ["branch"],
+					protectedBranches: ["main", "master", "develop", "dev"],
+					stashAgeDays: 30,
+				},
+			})
+			.mockResolvedValueOnce({
+				globalConfigPath: "/home/test/.git-clean-up.json",
+				policy: {
+					branchExcludePatterns: [],
+					branchInactiveDays: 90,
+					defaultTargetBranch: undefined,
+					divergedAheadCount: 10,
+					divergedBehindCount: 10,
+					includeCategories: ["branch"],
+					protectedBranches: ["main", "master", "develop", "dev"],
+					stashAgeDays: 30,
+				},
+			})
+
+		const { runApp } = await import("../index")
+		await runApp()
+
+		expect(uiMock.promptToCreateConfig).toHaveBeenCalledWith(
+			"global",
+			"/home/test/.git-clean-up.json",
+		)
+		expect(configMock.initializeCleanupPolicyConfig).toHaveBeenCalledWith(
+			"/home/test/.git-clean-up.json",
+		)
+	})
+
+	it("prompts to initialize a local config when only a global config exists", async () => {
+		uiMock.promptForConfigScopeChoice = vi.fn().mockResolvedValue("local")
+		configMock.loadCleanupPolicy
+			.mockResolvedValueOnce({
+				globalConfigPath: "/home/test/.git-clean-up.json",
+				policy: {
+					branchExcludePatterns: [],
+					branchInactiveDays: 90,
+					defaultTargetBranch: undefined,
+					divergedAheadCount: 10,
+					divergedBehindCount: 10,
+					includeCategories: ["branch"],
+					protectedBranches: ["main", "master", "develop", "dev"],
+					stashAgeDays: 30,
+				},
+			})
+			.mockResolvedValueOnce({
+				globalConfigPath: "/home/test/.git-clean-up.json",
+				localConfigPath: `${process.cwd()}/.git-clean-up.json`,
+				policy: {
+					branchExcludePatterns: [],
+					branchInactiveDays: 90,
+					defaultTargetBranch: undefined,
+					divergedAheadCount: 10,
+					divergedBehindCount: 10,
+					includeCategories: ["branch"],
+					protectedBranches: ["main", "master", "develop", "dev"],
+					stashAgeDays: 30,
+				},
+			})
+
+		const { runApp } = await import("../index")
+		await runApp()
+
+		expect(uiMock.promptForConfigScopeChoice).toHaveBeenCalledWith(
+			"/home/test/.git-clean-up.json",
+			`${process.cwd()}/.git-clean-up.json`,
+		)
+		expect(configMock.initializeCleanupPolicyConfig).toHaveBeenCalledWith(
+			`${process.cwd()}/.git-clean-up.json`,
+			expect.any(Object),
+		)
+	})
+
+	it("repairs an invalid configured default target branch by using the detected default", async () => {
+		uiMock.promptToRepairDefaultTargetBranch = vi
+			.fn()
+			.mockResolvedValue("use-detected-default")
+		configMock.loadCleanupPolicy.mockResolvedValue({
+			defaultTargetBranchSourcePath: `${process.cwd()}/.git-clean-up.json`,
+			localConfigPath: `${process.cwd()}/.git-clean-up.json`,
+			policy: {
+				branchExcludePatterns: [],
+				branchInactiveDays: 90,
+				defaultTargetBranch: "missing-branch",
+				divergedAheadCount: 10,
+				divergedBehindCount: 10,
+				includeCategories: ["branch"],
+				protectedBranches: ["main", "master", "develop", "dev"],
+				stashAgeDays: 30,
+			},
+		})
+		gitServiceMock.branchRefExists.mockResolvedValue(false)
+		gitServiceMock.getDefaultBranch.mockResolvedValue("origin/main")
+
+		const { runApp } = await import("../index")
+		await runApp()
+
+		expect(uiMock.promptToRepairDefaultTargetBranch).toHaveBeenCalledWith({
+			configPath: `${process.cwd()}/.git-clean-up.json`,
+			configuredTargetBranch: "missing-branch",
+			detectedTargetBranch: "origin/main",
+		})
+		expect(configMock.updateCleanupPolicyFile).toHaveBeenCalledWith(
+			`${process.cwd()}/.git-clean-up.json`,
+			{ defaultTargetBranch: "origin/main" },
+		)
+		expect(gitServiceMock.getBranchFindings).toHaveBeenCalledWith(
+			expect.objectContaining({ targetBranch: "origin/main" }),
+		)
+	})
+
+	it("waits for a manual config fix when repairing an invalid target branch", async () => {
+		uiMock.promptToRepairDefaultTargetBranch = vi
+			.fn()
+			.mockResolvedValue("fix-manually")
+		configMock.loadCleanupPolicy
+			.mockResolvedValueOnce({
+				defaultTargetBranchSourcePath: `${process.cwd()}/.git-clean-up.json`,
+				localConfigPath: `${process.cwd()}/.git-clean-up.json`,
+				policy: {
+					branchExcludePatterns: [],
+					branchInactiveDays: 90,
+					defaultTargetBranch: "missing-branch",
+					divergedAheadCount: 10,
+					divergedBehindCount: 10,
+					includeCategories: ["branch"],
+					protectedBranches: ["main", "master", "develop", "dev"],
+					stashAgeDays: 30,
+				},
+			})
+			.mockResolvedValueOnce({
+				defaultTargetBranchSourcePath: `${process.cwd()}/.git-clean-up.json`,
+				localConfigPath: `${process.cwd()}/.git-clean-up.json`,
+				policy: {
+					branchExcludePatterns: [],
+					branchInactiveDays: 90,
+					defaultTargetBranch: "origin/main",
+					divergedAheadCount: 10,
+					divergedBehindCount: 10,
+					includeCategories: ["branch"],
+					protectedBranches: ["main", "master", "develop", "dev"],
+					stashAgeDays: 30,
+				},
+			})
+		gitServiceMock.branchRefExists
+			.mockResolvedValueOnce(false)
+			.mockResolvedValueOnce(false)
+			.mockResolvedValueOnce(true)
+		gitServiceMock.getDefaultBranch.mockResolvedValue("origin/main")
+		configMock.waitForConfigChange.mockResolvedValue(undefined)
+
+		const { runApp } = await import("../index")
+		await runApp()
+
+		expect(configMock.waitForConfigChange).toHaveBeenCalledWith(
+			`${process.cwd()}/.git-clean-up.json`,
+		)
+		expect(gitServiceMock.getBranchFindings).toHaveBeenCalledWith(
+			expect.objectContaining({ targetBranch: "origin/main" }),
+		)
+	})
+
+	it("keeps prompting after manual edits until defaultTargetBranch becomes valid", async () => {
+		uiMock.promptToRepairDefaultTargetBranch = vi
+			.fn()
+			.mockResolvedValue("fix-manually")
+		configMock.loadCleanupPolicy
+			.mockResolvedValueOnce({
+				defaultTargetBranchSourcePath: `${process.cwd()}/.git-clean-up.json`,
+				localConfigPath: `${process.cwd()}/.git-clean-up.json`,
+				policy: {
+					branchExcludePatterns: [],
+					branchInactiveDays: 90,
+					defaultTargetBranch: "origin/m",
+					divergedAheadCount: 10,
+					divergedBehindCount: 10,
+					includeCategories: ["branch"],
+					protectedBranches: ["main", "master", "develop", "dev"],
+					stashAgeDays: 30,
+				},
+			})
+			.mockResolvedValueOnce({
+				defaultTargetBranchSourcePath: `${process.cwd()}/.git-clean-up.json`,
+				localConfigPath: `${process.cwd()}/.git-clean-up.json`,
+				policy: {
+					branchExcludePatterns: [],
+					branchInactiveDays: 90,
+					defaultTargetBranch: "origin/m2",
+					divergedAheadCount: 10,
+					divergedBehindCount: 10,
+					includeCategories: ["branch"],
+					protectedBranches: ["main", "master", "develop", "dev"],
+					stashAgeDays: 30,
+				},
+			})
+			.mockResolvedValueOnce({
+				defaultTargetBranchSourcePath: `${process.cwd()}/.git-clean-up.json`,
+				localConfigPath: `${process.cwd()}/.git-clean-up.json`,
+				policy: {
+					branchExcludePatterns: [],
+					branchInactiveDays: 90,
+					defaultTargetBranch: "origin/main",
+					divergedAheadCount: 10,
+					divergedBehindCount: 10,
+					includeCategories: ["branch"],
+					protectedBranches: ["main", "master", "develop", "dev"],
+					stashAgeDays: 30,
+				},
+			})
+		gitServiceMock.branchRefExists
+			.mockResolvedValueOnce(false)
+			.mockResolvedValueOnce(false)
+			.mockResolvedValueOnce(true)
+		gitServiceMock.getDefaultBranch.mockResolvedValue("origin/main")
+		configMock.waitForConfigChange.mockResolvedValue(undefined)
+
+		const { runApp } = await import("../index")
+		await runApp()
+
+		expect(uiMock.promptToRepairDefaultTargetBranch).toHaveBeenCalledTimes(2)
+		expect(uiMock.promptToRepairDefaultTargetBranch).toHaveBeenNthCalledWith(
+			1,
+			{
+				configPath: `${process.cwd()}/.git-clean-up.json`,
+				configuredTargetBranch: "origin/m",
+				detectedTargetBranch: "origin/main",
+			},
+		)
+		expect(uiMock.promptToRepairDefaultTargetBranch).toHaveBeenNthCalledWith(
+			2,
+			{
+				configPath: `${process.cwd()}/.git-clean-up.json`,
+				configuredTargetBranch: "origin/m2",
+				detectedTargetBranch: "origin/main",
+			},
+		)
+		expect(configMock.waitForConfigChange).toHaveBeenCalledTimes(2)
+		expect(gitServiceMock.getBranchFindings).toHaveBeenCalledWith(
+			expect.objectContaining({ targetBranch: "origin/main" }),
+		)
+	})
+
+	it("keeps prompting when manual edits remove defaultTargetBranch instead of fixing it", async () => {
+		uiMock.promptToRepairDefaultTargetBranch = vi
+			.fn()
+			.mockResolvedValue("fix-manually")
+		configMock.loadCleanupPolicy
+			.mockResolvedValueOnce({
+				defaultTargetBranchSourcePath: `${process.cwd()}/.git-clean-up.json`,
+				localConfigPath: `${process.cwd()}/.git-clean-up.json`,
+				policy: {
+					branchExcludePatterns: [],
+					branchInactiveDays: 90,
+					defaultTargetBranch: "origin/m",
+					divergedAheadCount: 10,
+					divergedBehindCount: 10,
+					includeCategories: ["branch"],
+					protectedBranches: ["main", "master", "develop", "dev"],
+					stashAgeDays: 30,
+				},
+			})
+			.mockResolvedValueOnce({
+				defaultTargetBranchSourcePath: `${process.cwd()}/.git-clean-up.json`,
+				localConfigPath: `${process.cwd()}/.git-clean-up.json`,
+				policy: {
+					branchExcludePatterns: [],
+					branchInactiveDays: 90,
+					defaultTargetBranch: undefined,
+					divergedAheadCount: 10,
+					divergedBehindCount: 10,
+					includeCategories: ["branch"],
+					protectedBranches: ["main", "master", "develop", "dev"],
+					stashAgeDays: 30,
+				},
+			})
+			.mockResolvedValueOnce({
+				defaultTargetBranchSourcePath: `${process.cwd()}/.git-clean-up.json`,
+				localConfigPath: `${process.cwd()}/.git-clean-up.json`,
+				policy: {
+					branchExcludePatterns: [],
+					branchInactiveDays: 90,
+					defaultTargetBranch: "origin/main",
+					divergedAheadCount: 10,
+					divergedBehindCount: 10,
+					includeCategories: ["branch"],
+					protectedBranches: ["main", "master", "develop", "dev"],
+					stashAgeDays: 30,
+				},
+			})
+		gitServiceMock.branchRefExists
+			.mockResolvedValueOnce(false)
+			.mockResolvedValueOnce(true)
+		gitServiceMock.getDefaultBranch.mockResolvedValue("origin/main")
+		configMock.waitForConfigChange.mockResolvedValue(undefined)
+
+		const { runApp } = await import("../index")
+		await runApp()
+
+		expect(uiMock.promptToRepairDefaultTargetBranch).toHaveBeenCalledTimes(2)
+		expect(uiMock.promptToRepairDefaultTargetBranch).toHaveBeenNthCalledWith(
+			1,
+			{
+				configPath: `${process.cwd()}/.git-clean-up.json`,
+				configuredTargetBranch: "origin/m",
+				detectedTargetBranch: "origin/main",
+			},
+		)
+		expect(uiMock.promptToRepairDefaultTargetBranch).toHaveBeenNthCalledWith(
+			2,
+			{
+				configPath: `${process.cwd()}/.git-clean-up.json`,
+				configuredTargetBranch: "",
+				detectedTargetBranch: "origin/main",
+			},
+		)
+		expect(configMock.waitForConfigChange).toHaveBeenCalledTimes(2)
 	})
 })

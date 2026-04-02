@@ -38,6 +38,79 @@ export async function promptForUpdate(
 	return confirmed as boolean
 }
 
+/** Prompts whether to create a missing global or local config file. */
+export async function promptToCreateConfig(
+	scope: "global" | "local",
+	configPath: string,
+): Promise<boolean> {
+	const confirmed = await p.confirm({
+		initialValue: true,
+		message: withVersionHeader(
+			`No ${scope} config was found. Create one at ${configPath}?`,
+		),
+	})
+
+	if (p.isCancel(confirmed)) {
+		return false
+	}
+
+	return confirmed as boolean
+}
+
+/** Prompts whether to keep using the global config or create a local one. */
+export async function promptForConfigScopeChoice(
+	globalConfigPath: string,
+	localConfigPath: string,
+): Promise<"global" | "local" | "exit"> {
+	const selectedAction = await p.select({
+		message: withVersionHeader(
+			`Using global config at ${globalConfigPath}. Keep using it or create a local config at ${localConfigPath}?`,
+		),
+		options: [
+			{ label: "Keep using global config", value: "global" },
+			{ label: "Create local config", value: "local" },
+			{ label: "Exit", value: "exit" },
+		],
+	})
+
+	if (p.isCancel(selectedAction)) {
+		return "exit"
+	}
+
+	return selectedAction as "global" | "local" | "exit"
+}
+
+/** Prompts how to repair an invalid configured defaultTargetBranch. */
+export async function promptToRepairDefaultTargetBranch({
+	configPath,
+	configuredTargetBranch,
+	detectedTargetBranch,
+}: {
+	configPath: string
+	configuredTargetBranch: string
+	detectedTargetBranch: string
+}): Promise<"use-detected-default" | "fix-manually" | "exit"> {
+	const selectedAction = await p.select({
+		message: withVersionHeader(
+			`Configured defaultTargetBranch \`${configuredTargetBranch}\` from ${configPath} does not exist. Use detected branch \`${detectedTargetBranch}\` or fix the config manually?`,
+		),
+		options: [
+			{
+				label: `Use detected branch (${detectedTargetBranch})`,
+				value: "use-detected-default",
+			},
+			{ label: "Fix the config file manually", value: "fix-manually" },
+			{ label: "Exit", value: "exit" },
+		],
+	})
+
+	if (p.isCancel(selectedAction)) {
+		return "exit"
+	}
+
+	return selectedAction as "use-detected-default" | "fix-manually" | "exit"
+}
+
 export async function showDone(message: string) {
 	p.outro(color.green(message))
 }
@@ -63,7 +136,48 @@ export function groupFindingsByCategory(
 }
 
 export function formatFindingLabel(finding: CleanupFinding): string {
-	return `${finding.title} ${color.dim(`[${finding.risk}] ${finding.reason}`)}`
+	const detailParts: string[] = []
+
+	if (finding.details?.lastCommitAgeDays !== undefined) {
+		detailParts.push(`${finding.details.lastCommitAgeDays}d old`)
+	}
+
+	if (
+		finding.details?.behindCount !== undefined &&
+		finding.details?.aheadCount !== undefined
+	) {
+		detailParts.push(
+			`behind ${finding.details.behindCount} / ahead ${finding.details.aheadCount}`,
+		)
+	}
+
+	if (finding.details?.upstream) {
+		detailParts.push(`upstream ${finding.details.upstream}`)
+	}
+
+	if (finding.details?.lastCommitAuthor) {
+		detailParts.push(`author ${finding.details.lastCommitAuthor}`)
+	}
+
+	const safetyWarnings = finding.details?.safetyWarnings ?? []
+	const coloredWarnings = safetyWarnings.map((w) => color.red(w))
+
+	const detailSuffix =
+		detailParts.length > 0 ? ` · ${detailParts.join(" · ")}` : ""
+
+	const warningSuffix =
+		coloredWarnings.length > 0 ? ` · ${coloredWarnings.join(" · ")}` : ""
+
+	const riskLabel =
+		finding.risk === "high"
+			? color.red(`[${finding.risk}]`)
+			: finding.risk === "medium"
+				? color.yellow(`[${finding.risk}]`)
+				: color.blue(`[${finding.risk}]`)
+
+	const fixablePrefix = finding.fixable ? "" : color.red("✖ ")
+
+	return `${fixablePrefix}${finding.title} ${riskLabel} ${color.dim(`${finding.reason}${detailSuffix}`)}${warningSuffix}`
 }
 
 export function serializeFindings(findings: CleanupFinding[]): string {
@@ -208,6 +322,21 @@ export async function confirmDeletion(count: number): Promise<boolean> {
 	}
 
 	return confirmed as boolean
+}
+
+export function showSummary(findings: CleanupFinding[]) {
+	const high = findings.filter((f) => f.risk === "high").length
+	const medium = findings.filter((f) => f.risk === "medium").length
+	const low = findings.filter((f) => f.risk === "low").length
+
+	const parts = [
+		`Total findings: ${findings.length}`,
+		high > 0 ? color.red(`${high} high risk`) : "",
+		medium > 0 ? color.yellow(`${medium} medium risk`) : "",
+		low > 0 ? color.blue(`${low} low risk`) : "",
+	].filter(Boolean)
+
+	p.note(parts.join(" · "), "Scan Summary")
 }
 
 export function createSpinner() {

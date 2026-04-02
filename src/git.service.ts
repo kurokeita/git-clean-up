@@ -1,7 +1,14 @@
 import { existsSync } from "node:fs"
 import { execa } from "execa"
-import { isProtectedBranch } from "./branch-protection"
-import type { CleanupFinding, ScanOptions } from "./cleanup.types"
+import { isProtectedBranch, matchesBranchPatterns } from "./branch-protection"
+import type {
+	CleanupFinding,
+	CleanupFindingDetails,
+	ResolvedCleanupPolicy,
+	ScanOptions,
+} from "./cleanup.types"
+import { DEFAULT_CLEANUP_POLICY } from "./config"
+import { inspectWorktree } from "./git-worktree-inspector"
 
 interface WorktreeInfo {
 	path: string
@@ -9,7 +16,138 @@ interface WorktreeInfo {
 	detached: boolean
 }
 
+/** Metadata about a single branch used for finding enrichment. */
+interface BranchInsight {
+	aheadCount: number
+	behindCount: number
+	lastCommitAgeDays?: number
+	lastCommitAuthor?: string
+	upstream?: string
+}
+
 export class GitService {
+	/**
+	 * Returns the absolute path to the repository root.
+	 */
+	async getRepositoryRoot(): Promise<string> {
+		const { stdout } = await execa("git", ["rev-parse", "--show-toplevel"])
+		return stdout.trim()
+	}
+
+	/** Checks whether a git ref or branch name resolves successfully. */
+	async branchRefExists(branch: string): Promise<boolean> {
+		try {
+			await execa("git", ["rev-parse", "--verify", "--quiet", branch])
+			return true
+		} catch (_error) {
+			return false
+		}
+	}
+
+	private async getBranchUpstream(branch: string): Promise<string | undefined> {
+		const { stdout } = await execa("git", [
+			"for-each-ref",
+			"--format=%(upstream:short)",
+			`refs/heads/${branch}`,
+		])
+		const upstream = stdout.trim()
+		return upstream === "" ? undefined : upstream
+	}
+
+	private async getAheadBehindCounts(
+		targetBranch: string,
+		branch: string,
+	): Promise<{ aheadCount: number; behindCount: number }> {
+		try {
+			const { stdout } = await execa("git", [
+				"rev-list",
+				"--left-right",
+				"--count",
+				`${targetBranch}...${branch}`,
+			])
+			const [behindRaw, aheadRaw] = stdout.trim().split("\t")
+
+			return {
+				aheadCount: Number(aheadRaw || 0),
+				behindCount: Number(behindRaw || 0),
+			}
+		} catch (_error) {
+			return {
+				aheadCount: 0,
+				behindCount: 0,
+			}
+		}
+	}
+
+	private async getLastCommitDetails(
+		branch: string,
+	): Promise<Pick<BranchInsight, "lastCommitAgeDays" | "lastCommitAuthor">> {
+		try {
+			const { stdout } = await execa("git", [
+				"log",
+				"-1",
+				"--format=%ct|%an",
+				branch,
+			])
+			const [timestampRaw, author = ""] = stdout.trim().split("|")
+			const timestamp = Number(timestampRaw)
+
+			if (!Number.isFinite(timestamp)) {
+				return {}
+			}
+
+			const ageSeconds = Math.max(0, Math.floor(Date.now() / 1000) - timestamp)
+			return {
+				lastCommitAgeDays: Math.floor(ageSeconds / (24 * 60 * 60)),
+				lastCommitAuthor: author.trim() === "" ? undefined : author.trim(),
+			}
+		} catch (_error) {
+			return {}
+		}
+	}
+
+	private async getBranchInsight(
+		branch: string,
+		targetBranch: string,
+	): Promise<BranchInsight> {
+		const [upstream, aheadBehind, lastCommitDetails] = await Promise.all([
+			this.getBranchUpstream(branch),
+			this.getAheadBehindCounts(targetBranch, branch),
+			this.getLastCommitDetails(branch),
+		])
+
+		return {
+			...aheadBehind,
+			...lastCommitDetails,
+			upstream,
+		}
+	}
+
+	private toFindingDetails(
+		insight?: BranchInsight,
+		safetyWarnings: string[] = [],
+	): CleanupFindingDetails | undefined {
+		if (!insight && safetyWarnings.length === 0) {
+			return undefined
+		}
+
+		const details: CleanupFindingDetails = {}
+
+		if (insight) {
+			details.aheadCount = insight.aheadCount
+			details.behindCount = insight.behindCount
+			details.lastCommitAgeDays = insight.lastCommitAgeDays
+			details.lastCommitAuthor = insight.lastCommitAuthor
+			details.upstream = insight.upstream
+		}
+
+		if (safetyWarnings.length > 0) {
+			details.safetyWarnings = safetyWarnings
+		}
+
+		return details
+	}
+
 	/**
 	 * Detects the repository's default branch.
 	 */
@@ -72,6 +210,9 @@ export class GitService {
 			.map((line) => line.split(" ")[0])
 	}
 
+	/**
+	 * Returns local branches that have no upstream tracking reference.
+	 */
 	async getNoUpstreamBranches(): Promise<string[]> {
 		const { stdout } = await execa("git", [
 			"for-each-ref",
@@ -134,26 +275,35 @@ export class GitService {
 		return squashed
 	}
 
-	async getLongDivergedBranches(targetBranch: string): Promise<string[]> {
+	/**
+	 * Identifies branches significantly diverged from the target.
+	 * Uses ahead/behind thresholds from the resolved policy.
+	 */
+	async getLongDivergedBranches(
+		targetBranch: string,
+		policy: ResolvedCleanupPolicy,
+	): Promise<string[]> {
 		const branches = await this.getTrackedBranchNames()
 		const diverged: string[] = []
 
 		for (const branch of branches) {
-			if (branch === targetBranch || isProtectedBranch(branch)) {
+			if (
+				branch === targetBranch ||
+				isProtectedBranch(branch, policy.protectedBranches) ||
+				matchesBranchPatterns(branch, policy.branchExcludePatterns)
+			) {
 				continue
 			}
 
 			try {
-				const { stdout } = await execa("git", [
-					"rev-list",
-					"--left-right",
-					"--count",
-					`${targetBranch}...${branch}`,
-				])
-				const [aheadRaw, behindRaw] = stdout.trim().split("\t")
-				const ahead = Number(aheadRaw || 0)
-				const behind = Number(behindRaw || 0)
-				if (ahead >= 10 && behind >= 10) {
+				const { aheadCount, behindCount } = await this.getAheadBehindCounts(
+					targetBranch,
+					branch,
+				)
+				if (
+					aheadCount >= policy.divergedAheadCount &&
+					behindCount >= policy.divergedBehindCount
+				) {
 					diverged.push(branch)
 				}
 			} catch (_error) {
@@ -280,7 +430,13 @@ export class GitService {
 		return findings
 	}
 
+	/**
+	 * Collects all branch cleanup findings by running detection heuristics in parallel.
+	 * Enriches findings with branch metadata (age, ahead/behind counts, upstream).
+	 * Respects policy for protected branches, exclusions, and thresholds.
+	 */
 	async getBranchFindings(options: ScanOptions): Promise<CleanupFinding[]> {
+		const policy = options.policy ?? DEFAULT_CLEANUP_POLICY
 		const [merged, gone, noUpstream, allLocal, worktreeBranches, diverged] =
 			await Promise.all([
 				this.getMergedBranches(options.targetBranch),
@@ -288,7 +444,7 @@ export class GitService {
 				this.getNoUpstreamBranches(),
 				this.getAllLocalBranches(),
 				this.getUsedWorktreeBranches(),
-				this.getLongDivergedBranches(options.targetBranch),
+				this.getLongDivergedBranches(options.targetBranch, policy),
 			])
 
 		const candidates = new Set([
@@ -300,15 +456,47 @@ export class GitService {
 		])
 		const findings = new Map<string, CleanupFinding>()
 		const noUpstreamSet = new Set(noUpstream)
+		const goneSet = new Set(gone)
+		const mergedSet = new Set(merged)
+		const branchInsights = new Map<string, BranchInsight>()
+		const candidateBranches = allLocal.filter(
+			(branch) =>
+				!isProtectedBranch(branch, policy.protectedBranches) &&
+				!matchesBranchPatterns(branch, policy.branchExcludePatterns) &&
+				!worktreeBranches.has(branch),
+		)
 
-		const addFinding = (branch: string, suffix: string, reason: string) => {
+		await Promise.all(
+			candidateBranches.map(async (branch) => {
+				branchInsights.set(
+					branch,
+					await this.getBranchInsight(branch, options.targetBranch),
+				)
+			}),
+		)
+
+		const addFinding = (
+			branch: string,
+			suffix: string,
+			reason: string,
+			overrides?: Partial<CleanupFinding>,
+		) => {
 			if (
-				isProtectedBranch(branch) ||
+				isProtectedBranch(branch, policy.protectedBranches) ||
+				matchesBranchPatterns(branch, policy.branchExcludePatterns) ||
 				!candidates.has(branch) ||
 				worktreeBranches.has(branch)
 			) {
 				return
 			}
+
+			const insight = branchInsights.get(branch)
+			const hasUniqueCommits = insight && insight.aheadCount > 0
+			const safetyWarnings = hasUniqueCommits
+				? [
+						`${insight.aheadCount} commit${insight.aheadCount === 1 ? "" : "s"} unique to this branch`,
+					]
+				: []
 
 			findings.set(`branch:${branch}:${suffix}`, {
 				category: "branch",
@@ -316,11 +504,13 @@ export class GitService {
 					target: branch,
 					type: "delete-branch",
 				},
-				fixable: true,
+				fixable: !hasUniqueCommits,
 				id: `branch:${branch}:${suffix}`,
 				reason,
-				risk: suffix === "gone" ? "low" : "medium",
+				risk: hasUniqueCommits ? "high" : suffix === "gone" ? "low" : "medium",
 				title: branch,
+				details: this.toFindingDetails(insight, safetyWarnings),
+				...overrides,
 			})
 		}
 
@@ -340,6 +530,47 @@ export class GitService {
 			addFinding(branch, "long-diverged", "Branch has significantly diverged")
 		}
 
+		for (const branch of candidateBranches) {
+			const insight = branchInsights.get(branch)
+			if (!insight) {
+				continue
+			}
+
+			const alreadyFlagged = [...findings.values()].some(
+				(finding) => finding.title === branch,
+			)
+
+			const isInactive =
+				!alreadyFlagged &&
+				!mergedSet.has(branch) &&
+				!goneSet.has(branch) &&
+				(insight.lastCommitAgeDays ?? 0) >= policy.branchInactiveDays &&
+				(noUpstreamSet.has(branch) ||
+					insight.behindCount >= policy.divergedBehindCount)
+
+			if (!isInactive) {
+				continue
+			}
+
+			const hasUniqueCommits = insight.aheadCount > 0
+			const safetyWarnings = hasUniqueCommits
+				? [
+						`${insight.aheadCount} commit${insight.aheadCount === 1 ? "" : "s"} unique to this branch`,
+					]
+				: []
+
+			addFinding(
+				branch,
+				"inactive",
+				`Inactive for ${insight.lastCommitAgeDays} days and behind ${options.targetBranch}`,
+				{
+					details: this.toFindingDetails(insight, safetyWarnings),
+					fixable: !hasUniqueCommits,
+					risk: hasUniqueCommits ? "high" : "medium",
+				},
+			)
+		}
+
 		const potentialSquashed = allLocal.filter(
 			(branch) =>
 				![...findings.values()].some((finding) => finding.title === branch),
@@ -349,21 +580,32 @@ export class GitService {
 			potentialSquashed,
 		)
 		for (const branch of squashed) {
+			const insight = branchInsights.get(branch)
+			const hasUniqueCommits = insight && insight.aheadCount > 0
 			addFinding(
 				branch,
 				"squashed",
 				`Squash-merged into ${options.targetBranch}`,
+				{
+					fixable: !hasUniqueCommits,
+					risk: hasUniqueCommits ? "high" : "medium",
+				},
 			)
 		}
 
 		return [...findings.values()]
 	}
 
+	/**
+	 * Collects all worktree cleanup findings (missing paths, detached heads, stale branches).
+	 * Respects policy for protected branch exclusions.
+	 */
 	async getWorktreeFindings(options: ScanOptions): Promise<CleanupFinding[]> {
+		const policy = options.policy ?? DEFAULT_CLEANUP_POLICY
 		const [worktrees, staleBranches, currentWorktreePath] = await Promise.all([
 			this.getWorktrees(),
 			this.getWorktreeStaleBranches(options),
-			this.getCurrentWorktreePath(),
+			this.getRepositoryRoot(),
 		])
 
 		const findings = new Map<string, CleanupFinding>()
@@ -373,64 +615,74 @@ export class GitService {
 				continue
 			}
 
-			if (!this.pathLooksAvailable(worktree.path)) {
-				findings.set(`worktree:${worktree.path}:missing-path`, {
+			const isMissing = !this.pathLooksAvailable(worktree.path)
+			const insight = isMissing
+				? undefined
+				: await inspectWorktree(
+						worktree.path,
+						worktree.branch,
+						worktree.detached,
+					)
+
+			const addWorktreeFinding = (
+				suffix: string,
+				reason: string,
+				overrides: Partial<CleanupFinding> = {},
+			) => {
+				const isRisky =
+					insight?.isDirty ||
+					insight?.hasUntracked ||
+					(insight?.unpushedCount ?? 0) > 0 ||
+					insight?.isDetachedUnreachable
+
+				findings.set(`worktree:${worktree.path}:${suffix}`, {
 					category: "worktree",
 					cleanupAction: {
 						target: worktree.path,
 						type: "remove-worktree",
 					},
-					fixable: true,
-					id: `worktree:${worktree.path}:missing-path`,
-					reason: "Worktree path is missing or inaccessible",
-					risk: "high",
+					details: insight?.details,
+					fixable: !isRisky && (overrides.fixable ?? true),
+					id: `worktree:${worktree.path}:${suffix}`,
+					reason,
+					risk: isRisky ? "high" : (overrides.risk ?? "medium"),
 					title: worktree.path,
+					...overrides,
 				})
+			}
+
+			if (isMissing) {
+				addWorktreeFinding(
+					"missing-path",
+					"Worktree path is missing or inaccessible",
+					{
+						risk: "high",
+					},
+				)
 			}
 
 			if (worktree.detached) {
-				findings.set(`worktree:${worktree.path}:detached-head`, {
-					category: "worktree",
-					cleanupAction: {
-						target: worktree.path,
-						type: "remove-worktree",
-					},
-					fixable: true,
-					id: `worktree:${worktree.path}:detached-head`,
-					reason: "Worktree is on a detached HEAD",
+				addWorktreeFinding("detached-head", "Worktree is on a detached HEAD", {
 					risk: "high",
-					title: worktree.path,
 				})
 			}
 
-			if (worktree.branch && isProtectedBranch(worktree.branch)) {
-				findings.set(`worktree:${worktree.path}:protected-branch`, {
-					category: "worktree",
-					cleanupAction: {
-						target: worktree.path,
-						type: "remove-worktree",
-					},
-					fixable: false,
-					id: `worktree:${worktree.path}:protected-branch`,
-					reason: `Worktree is attached to protected branch ${worktree.branch}`,
-					risk: "high",
-					title: worktree.path,
-				})
+			if (
+				worktree.branch &&
+				isProtectedBranch(worktree.branch, policy.protectedBranches)
+			) {
+				addWorktreeFinding(
+					"protected-branch",
+					`Worktree is attached to protected branch ${worktree.branch}`,
+					{ fixable: false, risk: "high" },
+				)
 			}
 
 			if (worktree.branch && staleBranches.has(worktree.branch)) {
-				findings.set(`worktree:${worktree.path}:stale-branch`, {
-					category: "worktree",
-					cleanupAction: {
-						target: worktree.path,
-						type: "remove-worktree",
-					},
-					fixable: true,
-					id: `worktree:${worktree.path}:stale-branch`,
-					reason: `Worktree points to stale branch ${worktree.branch}`,
-					risk: "medium",
-					title: worktree.path,
-				})
+				addWorktreeFinding(
+					"stale-branch",
+					`Worktree points to stale branch ${worktree.branch}`,
+				)
 			}
 		}
 
@@ -525,21 +777,21 @@ export class GitService {
 		return worktrees
 	}
 
-	private async getCurrentWorktreePath(): Promise<string> {
-		const { stdout } = await execa("git", ["rev-parse", "--show-toplevel"])
-		return stdout.trim()
-	}
-
 	private async getWorktreeStaleBranches(
 		options: ScanOptions,
 	): Promise<Set<string>> {
+		const policy = options.policy ?? DEFAULT_CLEANUP_POLICY
 		const [merged, gone] = await Promise.all([
 			this.getMergedBranches(options.targetBranch),
 			this.getGoneBranches(),
 		])
 
 		return new Set(
-			[...merged, ...gone].filter((branch) => !isProtectedBranch(branch)),
+			[...merged, ...gone].filter(
+				(branch) =>
+					!isProtectedBranch(branch, policy.protectedBranches) &&
+					!matchesBranchPatterns(branch, policy.branchExcludePatterns),
+			),
 		)
 	}
 
