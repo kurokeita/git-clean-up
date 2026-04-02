@@ -1,0 +1,11 @@
+{
+	"$schema": "./config-schema.json",
+	"branchExcludePatterns": [],
+	"branchInactiveDays": 90,
+	"defaultTargetBranch": "origin/main",
+	"divergedAheadCount": 10,
+	"divergedBehindCount": 10,
+	"includeCategories": ["branch", "stash", "worktree"],
+	"protectedBranches": ["main"],
+	"stashAgeDays": 30
+}
