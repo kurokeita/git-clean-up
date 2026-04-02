@@ -26,9 +26,10 @@ An audit-first CLI tool for cleaning local git repository hygiene. It scans for 
   - Branches active in other worktrees are excluded from branch deletion candidates.
   - `clean` is a preview by default.
   - Explicit confirmation is required before applying cleanup actions unless `--all` is used.
-- **Repo-Local Policy Config**:
-  - `git-clean-up` loads optional repo-local policy from `.git-clean-up.json`.
-  - CLI flags override repo config, and repo config overrides built-in defaults.
+- **Layered Policy Config**:
+  - `git-clean-up` can load a global config from `~/.git-clean-up.json` and a repo-local config from `.git-clean-up.json`.
+  - CLI flags override local config, local config overrides global config, and global config overrides built-in defaults.
+  - Interactive `scan` startup can help create missing config files and repair an invalid configured `defaultTargetBranch`.
 
 ## Installation
 
@@ -68,14 +69,22 @@ git-clean-up scan --target develop --age-days 14
 
 ## Configuration
 
-You can customize cleanup defaults per repository with a `.git-clean-up.json`
-file placed at the repository root:
+You can customize cleanup defaults with:
+
+- a global config at `~/.git-clean-up.json`
+- an optional repo-local config at `.git-clean-up.json`
+
+When both exist, the repo-local config overrides the global config.
+
+Example config:
 
 ```json
 {
+  "$schema": "https://github.com/kurokeita/git-clean-up/config-schema.json",
   "protectedBranches": ["release/*", "hotfix/*"],
   "includeCategories": ["branch", "worktree"],
   "stashAgeDays": 21,
+  "defaultTargetBranch": "origin/main",
   "branchInactiveDays": 90,
   "divergedAheadCount": 8,
   "divergedBehindCount": 8,
@@ -85,25 +94,46 @@ file placed at the repository root:
 
 Supported keys:
 
+- `$schema`: optional JSON Schema reference for IDE validation and autocomplete
 - `protectedBranches`: additional exact names or `*` wildcard patterns that
   should never be treated as cleanup candidates
 - `includeCategories`: default categories to scan (`branch`, `stash`,
   `worktree`)
 - `stashAgeDays`: default stash age threshold
-- `branchInactiveDays`: reserved for upcoming inactive-branch detection
+- `defaultTargetBranch`: default branch/ref to compare against when `--target` is not provided
+- `branchInactiveDays`: threshold used for inactive-branch detection
 - `divergedAheadCount`: default ahead threshold for long-diverged branches
 - `divergedBehindCount`: default behind threshold for long-diverged branches
 - `branchExcludePatterns`: branch patterns to exclude from branch cleanup
 
 Rules:
 
-- CLI flags take precedence over `.git-clean-up.json`
-- `.git-clean-up.json` extends built-in defaults for protected branches
-- Invalid config fails closed with a user-facing error
+- CLI flags take precedence over repo-local config
+- Repo-local config takes precedence over global config
+- Global config takes precedence over built-in defaults
+- Protected branches extend built-in defaults instead of replacing them
+
+### Interactive config help
+
+During interactive `scan` startup only:
+
+- If no config files exist, `git-clean-up` can offer to create a global config.
+- If only a global config exists, `git-clean-up` can offer to keep using it or create a local config for the repo.
+- If `defaultTargetBranch` is configured but invalid, `git-clean-up` can:
+  - replace it with the detected default branch, or
+  - wait for you to edit the config file and retry until the configured value becomes valid.
+- When `git-clean-up` creates a config file for you, it automatically sets
+  `$schema` to `https://github.com/kurokeita/git-clean-up/config-schema.json`.
 
 A JSON Schema for `.git-clean-up.json` is available at
-[`config-schema.json`](config-schema.json). Add `"$schema": "config-schema.json"`
-to your config file for editor validation and autocomplete.
+[`config-schema.json`](config-schema.json).
+You can add the canonical `$schema` reference for editor validation and autocomplete:
+
+```json
+"$schema": "https://github.com/kurokeita/git-clean-up/config-schema.json"
+```
+
+The `$schema` key is ignored by `git-clean-up` at runtime.
 
 ## Development
 

@@ -6,6 +6,11 @@
 	"type": "object",
 	"additionalProperties": false,
 	"properties": {
+		"$schema": {
+			"type": "string",
+			"description": "JSON schema reference for configuration validation.",
+			"examples": ["./config-schema.json", "config-schema.json"]
+		},
 		"protectedBranches": {
 			"type": "array",
 			"description": "Branch names or wildcard patterns that should never be treated as cleanup candidates. Extends the built-in defaults (main, master, develop, dev).",
@@ -31,6 +36,12 @@
 			"description": "Age threshold in days for flagging old stashes.",
 			"minimum": 0,
 			"default": 30
+		},
+		"defaultTargetBranch": {
+			"type": "string",
+			"description": "Default target branch to compare against when --target is not provided.",
+			"minLength": 1,
+			"examples": ["origin/main", "main", "release/1.x"]
 		},
 		"branchInactiveDays": {
 			"type": "integer",
