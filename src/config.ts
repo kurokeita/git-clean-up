@@ -81,7 +81,7 @@ function ensurePositiveInteger(value: unknown, key: string): number {
 	return value as number
 }
 
-function ensureOptionalString(value: unknown, _key: string): string {
+function ensureOptionalString(value: unknown): string {
 	if (typeof value !== "string") {
 		return ""
 	}
@@ -172,10 +172,7 @@ export function parseCleanupPolicy(raw: unknown): CleanupPolicy {
 	}
 
 	if ("defaultTargetBranch" in raw && raw.defaultTargetBranch !== undefined) {
-		policy.defaultTargetBranch = ensureOptionalString(
-			raw.defaultTargetBranch,
-			"defaultTargetBranch",
-		)
+		policy.defaultTargetBranch = ensureOptionalString(raw.defaultTargetBranch)
 	}
 
 	if ("branchInactiveDays" in raw && raw.branchInactiveDays !== undefined) {
