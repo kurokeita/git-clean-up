@@ -159,14 +159,25 @@ export function formatFindingLabel(finding: CleanupFinding): string {
 		detailParts.push(`author ${finding.details.lastCommitAuthor}`)
 	}
 
-	if (finding.details?.safetyWarnings?.length) {
-		detailParts.push(...finding.details.safetyWarnings)
-	}
+	const safetyWarnings = finding.details?.safetyWarnings ?? []
+	const coloredWarnings = safetyWarnings.map((w) => color.red(w))
 
 	const detailSuffix =
 		detailParts.length > 0 ? ` · ${detailParts.join(" · ")}` : ""
 
-	return `${finding.title} ${color.dim(`[${finding.risk}] ${finding.reason}${detailSuffix}`)}`
+	const warningSuffix =
+		coloredWarnings.length > 0 ? ` · ${coloredWarnings.join(" · ")}` : ""
+
+	const riskLabel =
+		finding.risk === "high"
+			? color.red(`[${finding.risk}]`)
+			: finding.risk === "medium"
+				? color.yellow(`[${finding.risk}]`)
+				: color.blue(`[${finding.risk}]`)
+
+	const fixablePrefix = finding.fixable ? "" : color.red("✖ ")
+
+	return `${fixablePrefix}${finding.title} ${riskLabel} ${color.dim(`${finding.reason}${detailSuffix}`)}${warningSuffix}`
 }
 
 export function serializeFindings(findings: CleanupFinding[]): string {
