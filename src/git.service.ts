@@ -33,6 +33,16 @@ export class GitService {
 		return stdout.trim()
 	}
 
+	/** Checks whether a git ref or branch name resolves successfully. */
+	async branchRefExists(branch: string): Promise<boolean> {
+		try {
+			await execa("git", ["rev-parse", "--verify", "--quiet", branch])
+			return true
+		} catch (_error) {
+			return false
+		}
+	}
+
 	private async getBranchUpstream(branch: string): Promise<string | undefined> {
 		const { stdout } = await execa("git", [
 			"for-each-ref",

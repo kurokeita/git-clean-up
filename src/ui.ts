@@ -38,6 +38,79 @@ export async function promptForUpdate(
 	return confirmed as boolean
 }
 
+/** Prompts whether to create a missing global or local config file. */
+export async function promptToCreateConfig(
+	scope: "global" | "local",
+	configPath: string,
+): Promise<boolean> {
+	const confirmed = await p.confirm({
+		initialValue: true,
+		message: withVersionHeader(
+			`No ${scope} config was found. Create one at ${configPath}?`,
+		),
+	})
+
+	if (p.isCancel(confirmed)) {
+		return false
+	}
+
+	return confirmed as boolean
+}
+
+/** Prompts whether to keep using the global config or create a local one. */
+export async function promptForConfigScopeChoice(
+	globalConfigPath: string,
+	localConfigPath: string,
+): Promise<"global" | "local" | "exit"> {
+	const selectedAction = await p.select({
+		message: withVersionHeader(
+			`Using global config at ${globalConfigPath}. Keep using it or create a local config at ${localConfigPath}?`,
+		),
+		options: [
+			{ label: "Keep using global config", value: "global" },
+			{ label: "Create local config", value: "local" },
+			{ label: "Exit", value: "exit" },
+		],
+	})
+
+	if (p.isCancel(selectedAction)) {
+		return "exit"
+	}
+
+	return selectedAction as "global" | "local" | "exit"
+}
+
+/** Prompts how to repair an invalid configured defaultTargetBranch. */
+export async function promptToRepairDefaultTargetBranch({
+	configPath,
+	configuredTargetBranch,
+	detectedTargetBranch,
+}: {
+	configPath: string
+	configuredTargetBranch: string
+	detectedTargetBranch: string
+}): Promise<"use-detected-default" | "fix-manually" | "exit"> {
+	const selectedAction = await p.select({
+		message: withVersionHeader(
+			`Configured defaultTargetBranch \`${configuredTargetBranch}\` from ${configPath} does not exist. Use detected branch \`${detectedTargetBranch}\` or fix the config manually?`,
+		),
+		options: [
+			{
+				label: `Use detected branch (${detectedTargetBranch})`,
+				value: "use-detected-default",
+			},
+			{ label: "Fix the config file manually", value: "fix-manually" },
+			{ label: "Exit", value: "exit" },
+		],
+	})
+
+	if (p.isCancel(selectedAction)) {
+		return "exit"
+	}
+
+	return selectedAction as "use-detected-default" | "fix-manually" | "exit"
+}
+
 export async function showDone(message: string) {
 	p.outro(color.green(message))
 }

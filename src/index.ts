@@ -3,7 +3,14 @@ import { pathToFileURL } from "node:url"
 import type { CleanupFinding, ScanOptions } from "./cleanup.types"
 import { CleanupExecutor } from "./cleanup-executor"
 import { createCli } from "./cli"
-import { loadCleanupPolicy } from "./config"
+import {
+	getGlobalConfigPath,
+	getLocalConfigPath,
+	initializeCleanupPolicyConfig,
+	loadCleanupPolicy,
+	updateCleanupPolicyFile,
+	waitForConfigChange,
+} from "./config"
 import { GitService } from "./git.service"
 import * as ui from "./ui"
 import { APP_NAME, checkForUpdates, installUpdate } from "./version"
@@ -88,6 +95,10 @@ async function runInteractiveScanLoop(
 	}
 }
 
+/**
+ * Runs the CLI entrypoint: parse args, resolve policy, optionally guide config setup,
+ * validate target branch selection, then execute scan or clean behavior.
+ */
 export async function runApp() {
 	const cli = createCli()
 	cli.program.parse()
@@ -135,11 +146,47 @@ export async function runApp() {
 				stop(_message: string, _code?: number) {},
 			}
 		: ui.createSpinner()
+	const shouldPromptForConfigSetup =
+		!parsedCommand.options.json && parsedCommand.mode === "scan"
 
 	try {
 		s.start("Loading cleanup policy...")
 		const repositoryRoot = await gitService.getRepositoryRoot()
-		const { policy } = await loadCleanupPolicy(repositoryRoot)
+		let loadedPolicy = await loadCleanupPolicy(repositoryRoot)
+
+		if (
+			shouldPromptForConfigSetup &&
+			!loadedPolicy.localConfigPath &&
+			!loadedPolicy.globalConfigPath
+		) {
+			const globalConfigPath = getGlobalConfigPath()
+			if (await ui.promptToCreateConfig("global", globalConfigPath)) {
+				await initializeCleanupPolicyConfig(globalConfigPath)
+				loadedPolicy = await loadCleanupPolicy(repositoryRoot)
+			}
+		}
+
+		if (
+			shouldPromptForConfigSetup &&
+			!loadedPolicy.localConfigPath &&
+			loadedPolicy.globalConfigPath
+		) {
+			const choice = await ui.promptForConfigScopeChoice(
+				loadedPolicy.globalConfigPath,
+				getLocalConfigPath(repositoryRoot),
+			)
+
+			if (choice === "exit") {
+				ui.showCancel("Cleanup cancelled")
+				return
+			}
+
+			if (choice === "local") {
+				await initializeCleanupPolicyConfig(getLocalConfigPath(repositoryRoot))
+				loadedPolicy = await loadCleanupPolicy(repositoryRoot)
+			}
+		}
+
 		s.stop("Cleanup policy loaded")
 
 		s.start("Pruning remotes...")
@@ -152,8 +199,61 @@ export async function runApp() {
 
 		s.start("Scanning branches...")
 
-		const targetBranch =
-			parsedCommand.options.target ?? (await gitService.getDefaultBranch())
+		let targetBranch = parsedCommand.options.target
+		let policy = loadedPolicy.policy
+
+		if (!targetBranch && policy.defaultTargetBranch) {
+			let configuredTargetBranch = policy.defaultTargetBranch
+
+			for (;;) {
+				if (
+					configuredTargetBranch !== "" &&
+					(await gitService.branchRefExists(configuredTargetBranch))
+				) {
+					targetBranch = configuredTargetBranch
+					break
+				}
+
+				const detectedTargetBranch = await gitService.getDefaultBranch()
+				if (
+					!shouldPromptForConfigSetup ||
+					!loadedPolicy.defaultTargetBranchSourcePath
+				) {
+					targetBranch = detectedTargetBranch
+					break
+				}
+
+				const repairAction = await ui.promptToRepairDefaultTargetBranch({
+					configPath: loadedPolicy.defaultTargetBranchSourcePath,
+					configuredTargetBranch,
+					detectedTargetBranch,
+				})
+
+				if (repairAction === "exit") {
+					ui.showCancel("Cleanup cancelled")
+					return
+				}
+
+				if (repairAction === "use-detected-default") {
+					await updateCleanupPolicyFile(
+						loadedPolicy.defaultTargetBranchSourcePath,
+						{ defaultTargetBranch: detectedTargetBranch },
+					)
+					targetBranch = detectedTargetBranch
+					break
+				}
+
+				ui.showNote(
+					`Waiting for ${loadedPolicy.defaultTargetBranchSourcePath} to be updated...`,
+				)
+				await waitForConfigChange(loadedPolicy.defaultTargetBranchSourcePath)
+				loadedPolicy = await loadCleanupPolicy(repositoryRoot)
+				policy = loadedPolicy.policy
+				configuredTargetBranch = loadedPolicy.policy.defaultTargetBranch ?? ""
+			}
+		}
+
+		targetBranch ??= await gitService.getDefaultBranch()
 		const scanOptions: ScanOptions = {
 			ageDays: parsedCommand.options.ageDays ?? policy.stashAgeDays,
 			include: parsedCommand.options.include ?? policy.includeCategories,
