@@ -88,4 +88,46 @@ describe("inspectWorktree", () => {
 		expect(insight.unpushedCount).toBe(3)
 		expect(insight.safetyWarnings).toContain("3 unpushed commits")
 	})
+
+	it("identifies unreachable detached HEAD commits", async () => {
+		vi.mocked(execa).mockImplementation((cmd, args) => {
+			if (args[0] === "status") {
+				return Promise.resolve({ stdout: "" }) as any
+			}
+			if (args[0] === "branch" && args[1] === "--contains") {
+				return Promise.resolve({
+					stdout: "* (HEAD detached at abc1234)",
+				}) as any
+			}
+			return Promise.resolve({ stdout: "" }) as any
+		})
+
+		const insight = await inspectWorktree(testDir, undefined, true)
+
+		expect(insight.isDetachedUnreachable).toBe(true)
+		expect(insight.safetyWarnings).toContain(
+			"Detached HEAD commits are not reachable from any branch",
+		)
+	})
+
+	it("identifies reachable detached HEAD commits", async () => {
+		vi.mocked(execa).mockImplementation((cmd, args) => {
+			if (args[0] === "status") {
+				return Promise.resolve({ stdout: "" }) as any
+			}
+			if (args[0] === "branch" && args[1] === "--contains") {
+				return Promise.resolve({
+					stdout: "* (HEAD detached at abc1234)\n  main",
+				}) as any
+			}
+			return Promise.resolve({ stdout: "" }) as any
+		})
+
+		const insight = await inspectWorktree(testDir, undefined, true)
+
+		expect(insight.isDetachedUnreachable).toBe(false)
+		expect(insight.safetyWarnings).not.toContain(
+			"Detached HEAD commits are not reachable from any branch",
+		)
+	})
 })

@@ -5,6 +5,7 @@ export interface WorktreeSafetyInsight {
 	isDirty: boolean
 	hasUntracked: boolean
 	unpushedCount: number
+	isDetachedUnreachable: boolean
 	safetyWarnings: string[]
 	details: CleanupFindingDetails
 }
@@ -16,12 +17,15 @@ export interface WorktreeSafetyInsight {
 export async function inspectWorktree(
 	path: string,
 	branch?: string,
+	isDetached = false,
 ): Promise<WorktreeSafetyInsight> {
-	const [isDirty, hasUntracked, unpushedCount] = await Promise.all([
-		checkIfDirty(path),
-		checkIfHasUntracked(path),
-		checkUnpushedCommits(path, branch),
-	])
+	const [isDirty, hasUntracked, unpushedCount, isDetachedUnreachable] =
+		await Promise.all([
+			checkIfDirty(path),
+			checkIfHasUntracked(path),
+			checkUnpushedCommits(path, branch),
+			checkDetachedHeadSafety(path, isDetached),
+		])
 
 	const safetyWarnings: string[] = []
 	if (isDirty) {
@@ -35,15 +39,48 @@ export async function inspectWorktree(
 			`${unpushedCount} unpushed commit${unpushedCount === 1 ? "" : "s"}`,
 		)
 	}
+	if (isDetachedUnreachable) {
+		safetyWarnings.push(
+			"Detached HEAD commits are not reachable from any branch",
+		)
+	}
 
 	return {
 		details: {
 			safetyWarnings: safetyWarnings.length > 0 ? safetyWarnings : undefined,
 		},
 		hasUntracked,
+		isDetachedUnreachable,
 		isDirty,
 		safetyWarnings,
 		unpushedCount,
+	}
+}
+
+async function checkDetachedHeadSafety(
+	path: string,
+	isDetached: boolean,
+): Promise<boolean> {
+	if (!isDetached) {
+		return false
+	}
+
+	try {
+		// git branch --contains HEAD lists branches that contain the current HEAD commit.
+		// If only (HEAD detached at ...) is listed, it's not reachable from any branch.
+		const { stdout } = await execa("git", ["branch", "--contains", "HEAD"], {
+			cwd: path,
+		})
+
+		const branches = stdout
+			.split("\n")
+			.map((line) => line.trim())
+			.filter((line) => line !== "" && !line.startsWith("* (HEAD detached"))
+
+		return branches.length === 0
+	} catch (_error) {
+		// If command fails, we assume it's risky.
+		return true
 	}
 }
 

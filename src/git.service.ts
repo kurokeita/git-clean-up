@@ -612,7 +612,11 @@ export class GitService {
 			const isMissing = !this.pathLooksAvailable(worktree.path)
 			const insight = isMissing
 				? undefined
-				: await inspectWorktree(worktree.path, worktree.branch)
+				: await inspectWorktree(
+						worktree.path,
+						worktree.branch,
+						worktree.detached,
+					)
 
 			const addWorktreeFinding = (
 				suffix: string,
@@ -622,7 +626,8 @@ export class GitService {
 				const isRisky =
 					insight?.isDirty ||
 					insight?.hasUntracked ||
-					(insight?.unpushedCount ?? 0) > 0
+					(insight?.unpushedCount ?? 0) > 0 ||
+					insight?.isDetachedUnreachable
 
 				findings.set(`worktree:${worktree.path}:${suffix}`, {
 					category: "worktree",
