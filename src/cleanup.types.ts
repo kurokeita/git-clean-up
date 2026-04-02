@@ -3,13 +3,14 @@ export type CleanupCategory = "branch" | "stash" | "worktree"
 export type CleanupRisk = "low" | "medium" | "high"
 
 /**
- * User-provided cleanup policy from `.git-clean-up.json`.
+ * User-provided cleanup policy loaded from global and/or local `.git-clean-up.json` files.
  * All fields are optional — missing fields fall back to built-in defaults.
  */
 export interface CleanupPolicy {
 	protectedBranches?: string[]
 	includeCategories?: CleanupCategory[]
 	stashAgeDays?: number
+	defaultTargetBranch?: string
 	branchInactiveDays?: number
 	divergedAheadCount?: number
 	divergedBehindCount?: number
@@ -18,12 +19,13 @@ export interface CleanupPolicy {
 
 /**
  * Fully resolved cleanup policy with all fields populated.
- * Produced by merging CleanupPolicy with DEFAULT_CLEANUP_POLICY.
+ * Produced by resolving defaults and merging global/local policy inputs.
  */
 export interface ResolvedCleanupPolicy {
 	protectedBranches: string[]
 	includeCategories: CleanupCategory[]
 	stashAgeDays: number
+	defaultTargetBranch?: string
 	branchInactiveDays: number
 	divergedAheadCount: number
 	divergedBehindCount: number

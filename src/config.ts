@@ -1,5 +1,7 @@
-import { readFile } from "node:fs/promises"
-import { join } from "node:path"
+import { watch } from "node:fs"
+import { mkdir, readFile, writeFile } from "node:fs/promises"
+import { homedir } from "node:os"
+import { dirname, join } from "node:path"
 import {
 	DEFAULT_PROTECTED_BRANCHES,
 	matchesBranchPattern,
@@ -12,12 +14,16 @@ import type {
 
 /** Filename for repo-local cleanup policy configuration. */
 export const CONFIG_FILE_NAME = ".git-clean-up.json"
+export const CONFIG_SCHEMA_URL =
+	"https://github.com/kurokeita/git-clean-up/config-schema.json"
 
 const VALID_CATEGORIES: CleanupCategory[] = ["branch", "stash", "worktree"]
 const VALID_KEYS = new Set([
+	"$schema",
 	"protectedBranches",
 	"includeCategories",
 	"stashAgeDays",
+	"defaultTargetBranch",
 	"branchInactiveDays",
 	"divergedAheadCount",
 	"divergedBehindCount",
@@ -37,8 +43,14 @@ export const DEFAULT_CLEANUP_POLICY: ResolvedCleanupPolicy = {
 
 /** Result of loading cleanup policy from disk. */
 export interface LoadedCleanupPolicy {
-	/** Absolute path to the config file, or undefined if using defaults. */
+	/** Effective config path by precedence: local if present, else global. */
 	configPath?: string
+	/** Absolute path to the repo-local config file, if present. */
+	localConfigPath?: string
+	/** Absolute path to the global config file, if present. */
+	globalConfigPath?: string
+	/** Config path that supplied defaultTargetBranch, if any. */
+	defaultTargetBranchSourcePath?: string
 	/** The resolved policy with all fields populated. */
 	policy: ResolvedCleanupPolicy
 }
@@ -67,6 +79,14 @@ function ensurePositiveInteger(value: unknown, key: string): number {
 	}
 
 	return value as number
+}
+
+function ensureOptionalString(value: unknown, key: string): string {
+	if (typeof value !== "string" || value.trim() === "") {
+		throw new Error(`${key} must be a non-empty string`)
+	}
+
+	return value.trim()
 }
 
 function parseCategories(value: unknown): CleanupCategory[] {
@@ -103,6 +123,7 @@ export function resolveCleanupPolicy(
 		branchExcludePatterns: [...(config.branchExcludePatterns ?? [])],
 		branchInactiveDays:
 			config.branchInactiveDays ?? DEFAULT_CLEANUP_POLICY.branchInactiveDays,
+		defaultTargetBranch: config.defaultTargetBranch,
 		divergedAheadCount:
 			config.divergedAheadCount ?? DEFAULT_CLEANUP_POLICY.divergedAheadCount,
 		divergedBehindCount:
@@ -150,6 +171,13 @@ export function parseCleanupPolicy(raw: unknown): CleanupPolicy {
 		)
 	}
 
+	if ("defaultTargetBranch" in raw && raw.defaultTargetBranch !== undefined) {
+		policy.defaultTargetBranch = ensureOptionalString(
+			raw.defaultTargetBranch,
+			"defaultTargetBranch",
+		)
+	}
+
 	if ("branchInactiveDays" in raw && raw.branchInactiveDays !== undefined) {
 		policy.branchInactiveDays = ensurePositiveInteger(
 			raw.branchInactiveDays,
@@ -190,28 +218,26 @@ export function parseCleanupPolicy(raw: unknown): CleanupPolicy {
 	return policy
 }
 
-/**
- * Loads cleanup policy from `.git-clean-up.json` in the repository root.
- * Returns built-in defaults if no config file exists.
- * @throws Error if the config file exists but is malformed.
- */
-export async function loadCleanupPolicy(
-	repositoryRoot: string,
-): Promise<LoadedCleanupPolicy> {
-	const configPath = join(repositoryRoot, CONFIG_FILE_NAME)
+/** Returns the global config path (`~/.git-clean-up.json`) for a home directory. */
+export function getGlobalConfigPath(homeDirectory = homedir()): string {
+	return join(homeDirectory, CONFIG_FILE_NAME)
+}
 
+/** Returns the repo-local config path for a repository root. */
+export function getLocalConfigPath(repositoryRoot: string): string {
+	return join(repositoryRoot, CONFIG_FILE_NAME)
+}
+
+async function readCleanupPolicyFile(
+	configPath: string,
+): Promise<CleanupPolicy> {
 	try {
 		const fileContents = await readFile(configPath, "utf8")
 		const parsed = JSON.parse(fileContents) as unknown
-		return {
-			configPath,
-			policy: resolveCleanupPolicy(parseCleanupPolicy(parsed)),
-		}
+		return parseCleanupPolicy(parsed)
 	} catch (error) {
 		if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-			return {
-				policy: resolveCleanupPolicy(),
-			}
+			throw error
 		}
 
 		if (error instanceof SyntaxError) {
@@ -223,5 +249,123 @@ export async function loadCleanupPolicy(
 		}
 
 		throw error
+	}
+}
+
+/** Creates a cleanup policy config file, including parent directories if needed. */
+export async function initializeCleanupPolicyConfig(
+	configPath: string,
+	policy: CleanupPolicy = DEFAULT_CLEANUP_POLICY,
+): Promise<void> {
+	await mkdir(dirname(configPath), { recursive: true })
+	await writeFile(
+		`${configPath}`,
+		`${JSON.stringify({ $schema: CONFIG_SCHEMA_URL, ...policy }, null, 2)}\n`,
+		"utf8",
+	)
+}
+
+/** Applies a partial update to an existing cleanup policy file. */
+export async function updateCleanupPolicyFile(
+	configPath: string,
+	updates: Partial<CleanupPolicy>,
+): Promise<void> {
+	const currentPolicy = await readCleanupPolicyFile(configPath)
+	await initializeCleanupPolicyConfig(configPath, {
+		...currentPolicy,
+		...updates,
+	})
+}
+
+/** Waits for a config file change before attempting to reload it. */
+export async function waitForConfigChange(configPath: string): Promise<void> {
+	await new Promise<void>((resolve, reject) => {
+		let timer: NodeJS.Timeout | undefined
+		const watcher = watch(configPath, (eventType, _filename) => {
+			if (eventType !== "change" && eventType !== "rename") {
+				return
+			}
+
+			if (timer) {
+				clearTimeout(timer)
+			}
+
+			timer = setTimeout(() => {
+				watcher.close()
+				resolve()
+			}, 100)
+		})
+
+		watcher.once("error", (error) => {
+			if (timer) {
+				clearTimeout(timer)
+			}
+			watcher.close()
+			reject(error)
+		})
+	})
+}
+
+/**
+ * Loads cleanup policy using the precedence base of defaults <- global <- local.
+ * CLI flags are applied later by the application entry point.
+ * @throws Error if the config file exists but is malformed.
+ */
+export async function loadCleanupPolicy(
+	repositoryRoot: string,
+	homeDirectory = homedir(),
+): Promise<LoadedCleanupPolicy> {
+	const localConfigPath = getLocalConfigPath(repositoryRoot)
+	const globalConfigPath = getGlobalConfigPath(homeDirectory)
+
+	let globalPolicy: CleanupPolicy = {}
+	let localPolicy: CleanupPolicy = {}
+	let hasGlobalConfig = false
+	let hasLocalConfig = false
+
+	try {
+		globalPolicy = await readCleanupPolicyFile(globalConfigPath)
+		hasGlobalConfig = true
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+			throw error
+		}
+	}
+
+	try {
+		localPolicy = await readCleanupPolicyFile(localConfigPath)
+		hasLocalConfig = true
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+			throw error
+		}
+	}
+
+	const mergedPolicy = resolveCleanupPolicy({
+		...globalPolicy,
+		...localPolicy,
+		protectedBranches: [
+			...(globalPolicy.protectedBranches ?? []),
+			...(localPolicy.protectedBranches ?? []),
+		],
+	})
+
+	const defaultTargetBranchSourcePath =
+		localPolicy.defaultTargetBranch !== undefined
+			? localConfigPath
+			: globalPolicy.defaultTargetBranch !== undefined
+				? globalConfigPath
+				: undefined
+
+	return {
+		configPath: hasLocalConfig
+			? localConfigPath
+			: hasGlobalConfig
+				? globalConfigPath
+				: undefined,
+		defaultTargetBranchSourcePath,
+		globalConfigPath: hasGlobalConfig ? globalConfigPath : undefined,
+		localConfigPath: hasLocalConfig ? localConfigPath : undefined,
+		policy: mergedPolicy,
 	}
 }
