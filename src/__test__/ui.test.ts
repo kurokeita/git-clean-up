@@ -85,10 +85,37 @@ describe("ui helpers", () => {
 		)
 	})
 
+	it("formats structured finding details without changing the JSON payload", () => {
+		const label = formatFindingLabel(
+			finding({
+				details: {
+					aheadCount: 1,
+					behindCount: 12,
+					lastCommitAgeDays: 45,
+					lastCommitAuthor: "Test User",
+					upstream: "origin/feature/demo",
+				},
+			}),
+		)
+
+		expect(label).toContain("45d old")
+		expect(label).toContain("behind 12 / ahead 1")
+		expect(label).toContain("origin/feature/demo")
+		expect(label).toContain("Test User")
+	})
+
 	it("serializes findings for json output", () => {
-		const output = serializeFindings([finding({ category: "worktree" })])
+		const output = serializeFindings([
+			finding({
+				category: "worktree",
+				details: {
+					safetyWarnings: ["Has unpushed commits"],
+				},
+			}),
+		])
 		expect(output).toContain('"category": "worktree"')
 		expect(output).toContain('"fixable": true')
+		expect(output).toContain('"safetyWarnings"')
 	})
 
 	it("builds category options from grouped findings", () => {

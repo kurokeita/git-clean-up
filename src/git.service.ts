@@ -3,6 +3,7 @@ import { execa } from "execa"
 import { isProtectedBranch, matchesBranchPatterns } from "./branch-protection"
 import type {
 	CleanupFinding,
+	CleanupFindingDetails,
 	ResolvedCleanupPolicy,
 	ScanOptions,
 } from "./cleanup.types"
@@ -14,10 +15,122 @@ interface WorktreeInfo {
 	detached: boolean
 }
 
+interface BranchInsight {
+	aheadCount: number
+	behindCount: number
+	lastCommitAgeDays?: number
+	lastCommitAuthor?: string
+	upstream?: string
+}
+
 export class GitService {
 	async getRepositoryRoot(): Promise<string> {
 		const { stdout } = await execa("git", ["rev-parse", "--show-toplevel"])
 		return stdout.trim()
+	}
+
+	private async getBranchUpstream(branch: string): Promise<string | undefined> {
+		const { stdout } = await execa("git", [
+			"for-each-ref",
+			"--format=%(upstream:short)",
+			`refs/heads/${branch}`,
+		])
+		const upstream = stdout.trim()
+		return upstream === "" ? undefined : upstream
+	}
+
+	private async getAheadBehindCounts(
+		targetBranch: string,
+		branch: string,
+	): Promise<{ aheadCount: number; behindCount: number }> {
+		try {
+			const { stdout } = await execa("git", [
+				"rev-list",
+				"--left-right",
+				"--count",
+				`${targetBranch}...${branch}`,
+			])
+			const [behindRaw, aheadRaw] = stdout.trim().split("\t")
+
+			return {
+				aheadCount: Number(aheadRaw || 0),
+				behindCount: Number(behindRaw || 0),
+			}
+		} catch (_error) {
+			return {
+				aheadCount: 0,
+				behindCount: 0,
+			}
+		}
+	}
+
+	private async getLastCommitDetails(
+		branch: string,
+	): Promise<Pick<BranchInsight, "lastCommitAgeDays" | "lastCommitAuthor">> {
+		try {
+			const { stdout } = await execa("git", [
+				"log",
+				"-1",
+				"--format=%ct|%an",
+				branch,
+			])
+			const [timestampRaw, author = ""] = stdout.trim().split("|")
+			const timestamp = Number(timestampRaw)
+
+			if (!Number.isFinite(timestamp)) {
+				return {}
+			}
+
+			const ageSeconds = Math.max(0, Math.floor(Date.now() / 1000) - timestamp)
+			return {
+				lastCommitAgeDays: Math.floor(ageSeconds / (24 * 60 * 60)),
+				lastCommitAuthor: author.trim() === "" ? undefined : author.trim(),
+			}
+		} catch (_error) {
+			return {}
+		}
+	}
+
+	private async getBranchInsight(
+		branch: string,
+		targetBranch: string,
+	): Promise<BranchInsight> {
+		const [upstream, aheadBehind, lastCommitDetails] = await Promise.all([
+			this.getBranchUpstream(branch),
+			this.getAheadBehindCounts(targetBranch, branch),
+			this.getLastCommitDetails(branch),
+		])
+
+		return {
+			...aheadBehind,
+			...lastCommitDetails,
+			upstream,
+		}
+	}
+
+	private toFindingDetails(
+		insight?: BranchInsight,
+		safetyWarnings: string[] = [],
+	): CleanupFindingDetails | undefined {
+		if (!insight && safetyWarnings.length === 0) {
+			return undefined
+		}
+
+		const details: CleanupFindingDetails = {}
+
+		if (insight) {
+			details.aheadCount = insight.aheadCount
+			details.behindCount = insight.behindCount
+			details.lastCommitAgeDays = insight.lastCommitAgeDays
+			details.lastCommitAuthor = insight.lastCommitAuthor
+			details.upstream = insight.upstream
+		}
+
+		if (safetyWarnings.length > 0) {
+			details.safetyWarnings = safetyWarnings
+		}
+
+		return details
 	}
 
 	/**
@@ -161,18 +274,13 @@ export class GitService {
 			}
 
 			try {
-				const { stdout } = await execa("git", [
-					"rev-list",
-					"--left-right",
-					"--count",
-					`${targetBranch}...${branch}`,
-				])
-				const [aheadRaw, behindRaw] = stdout.trim().split("\t")
-				const ahead = Number(aheadRaw || 0)
-				const behind = Number(behindRaw || 0)
+				const { aheadCount, behindCount } = await this.getAheadBehindCounts(
+					targetBranch,
+					branch,
+				)
 				if (
-					ahead >= policy.divergedAheadCount &&
-					behind >= policy.divergedBehindCount
+					aheadCount >= policy.divergedAheadCount &&
+					behindCount >= policy.divergedBehindCount
 				) {
 					diverged.push(branch)
 				}
@@ -321,8 +429,31 @@ export class GitService {
 		])
 		const findings = new Map<string, CleanupFinding>()
 		const noUpstreamSet = new Set(noUpstream)
+		const goneSet = new Set(gone)
+		const mergedSet = new Set(merged)
+		const branchInsights = new Map<string, BranchInsight>()
+		const candidateBranches = allLocal.filter(
+			(branch) =>
+				!isProtectedBranch(branch, policy.protectedBranches) &&
+				!matchesBranchPatterns(branch, policy.branchExcludePatterns) &&
+				!worktreeBranches.has(branch),
+		)
 
-		const addFinding = (branch: string, suffix: string, reason: string) => {
+		await Promise.all(
+			candidateBranches.map(async (branch) => {
+				branchInsights.set(
+					branch,
+					await this.getBranchInsight(branch, options.targetBranch),
+				)
+			}),
+		)
+
+		const addFinding = (
+			branch: string,
+			suffix: string,
+			reason: string,
+			overrides?: Partial<CleanupFinding>,
+		) => {
 			if (
 				isProtectedBranch(branch, policy.protectedBranches) ||
 				matchesBranchPatterns(branch, policy.branchExcludePatterns) ||
@@ -331,6 +462,14 @@ export class GitService {
 			) {
 				return
 			}
+
+			const insight = branchInsights.get(branch)
+			const safetyWarnings =
+				insight && insight.aheadCount > 0
+					? [
+							`${insight.aheadCount} commit${insight.aheadCount === 1 ? "" : "s"} unique to this branch`,
+						]
+					: []
 
 			findings.set(`branch:${branch}:${suffix}`, {
 				category: "branch",
@@ -343,6 +482,8 @@ export class GitService {
 				reason,
 				risk: suffix === "gone" ? "low" : "medium",
 				title: branch,
+				details: this.toFindingDetails(insight, safetyWarnings),
+				...overrides,
 			})
 		}
 
@@ -360,6 +501,47 @@ export class GitService {
 		}
 		for (const branch of diverged) {
 			addFinding(branch, "long-diverged", "Branch has significantly diverged")
+		}
+
+		for (const branch of candidateBranches) {
+			const insight = branchInsights.get(branch)
+			if (!insight) {
+				continue
+			}
+
+			const alreadyFlagged = [...findings.values()].some(
+				(finding) => finding.title === branch,
+			)
+
+			const isInactive =
+				!alreadyFlagged &&
+				!mergedSet.has(branch) &&
+				!goneSet.has(branch) &&
+				(insight.lastCommitAgeDays ?? 0) >= policy.branchInactiveDays &&
+				(noUpstreamSet.has(branch) ||
+					insight.behindCount >= policy.divergedBehindCount)
+
+			if (!isInactive) {
+				continue
+			}
+
+			const hasUniqueCommits = insight.aheadCount > 0
+			const safetyWarnings = hasUniqueCommits
+				? [
+						`${insight.aheadCount} commit${insight.aheadCount === 1 ? "" : "s"} unique to this branch`,
+					]
+				: []
+
+			addFinding(
+				branch,
+				"inactive",
+				`Inactive for ${insight.lastCommitAgeDays} days and behind ${options.targetBranch}`,
+				{
+					details: this.toFindingDetails(insight, safetyWarnings),
+					fixable: !hasUniqueCommits,
+					risk: hasUniqueCommits ? "high" : "medium",
+				},
+			)
 		}
 
 		const potentialSquashed = allLocal.filter(

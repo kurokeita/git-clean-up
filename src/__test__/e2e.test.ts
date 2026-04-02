@@ -110,6 +110,8 @@ describe("E2E", () => {
 		expect(stdout).toContain('"category": "branch"')
 		expect(stdout).toContain('"category": "stash"')
 		expect(stdout).toContain('"category": "worktree"')
+		expect(stdout).toContain('"details"')
+		expect(stdout).toContain('"lastCommitAuthor"')
 		expect(stdout).toContain("merged-branch")
 		expect(stdout).toContain(worktreePath)
 		expect(() => JSON.parse(stdout)).not.toThrow()

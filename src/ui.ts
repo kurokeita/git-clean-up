@@ -63,7 +63,37 @@ export function groupFindingsByCategory(
 }
 
 export function formatFindingLabel(finding: CleanupFinding): string {
-	return `${finding.title} ${color.dim(`[${finding.risk}] ${finding.reason}`)}`
+	const detailParts: string[] = []
+
+	if (finding.details?.lastCommitAgeDays !== undefined) {
+		detailParts.push(`${finding.details.lastCommitAgeDays}d old`)
+	}
+
+	if (
+		finding.details?.behindCount !== undefined &&
+		finding.details?.aheadCount !== undefined
+	) {
+		detailParts.push(
+			`behind ${finding.details.behindCount} / ahead ${finding.details.aheadCount}`,
+		)
+	}
+
+	if (finding.details?.upstream) {
+		detailParts.push(`upstream ${finding.details.upstream}`)
+	}
+
+	if (finding.details?.lastCommitAuthor) {
+		detailParts.push(`author ${finding.details.lastCommitAuthor}`)
+	}
+
+	if (finding.details?.safetyWarnings?.length) {
+		detailParts.push(...finding.details.safetyWarnings)
+	}
+
+	const detailSuffix =
+		detailParts.length > 0 ? ` · ${detailParts.join(" · ")}` : ""
+
+	return `${finding.title} ${color.dim(`[${finding.risk}] ${finding.reason}${detailSuffix}`)}`
 }
 
 export function serializeFindings(findings: CleanupFinding[]): string {

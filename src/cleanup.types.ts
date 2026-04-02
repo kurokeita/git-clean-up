@@ -33,6 +33,15 @@ export interface CleanupAction {
 	path?: string
 }
 
+export interface CleanupFindingDetails {
+	aheadCount?: number
+	behindCount?: number
+	lastCommitAgeDays?: number
+	lastCommitAuthor?: string
+	safetyWarnings?: string[]
+	upstream?: string
+}
+
 export interface CleanupFinding {
 	id: string
 	category: CleanupCategory
@@ -41,6 +50,8 @@ export interface CleanupFinding {
 	risk: CleanupRisk
 	fixable: boolean
 	cleanupAction: CleanupAction
+	details?: CleanupFindingDetails
+	restoreKey?: string
 }
 
 export interface ScanOptions {
