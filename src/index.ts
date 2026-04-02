@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { pathToFileURL } from "node:url"
-import type { CleanupFinding, ScanOptions } from "./cleanup.types"
+import type { CleanupFinding, CleanupRisk, ScanOptions } from "./cleanup.types"
 import { CleanupExecutor } from "./cleanup-executor"
 import { createCli } from "./cli"
 import {
@@ -134,7 +134,10 @@ export async function runApp() {
 		throw new Error("No command was parsed")
 	}
 
-	if (!parsedCommand.options.json) {
+	const isCi =
+		process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true"
+
+	if (!parsedCommand.options.json && !isCi) {
 		const updateInfo = await checkForUpdates()
 
 		if (updateInfo) {
@@ -165,15 +168,16 @@ export async function runApp() {
 
 	const gitService = new GitService()
 	const cleanupExecutor = new CleanupExecutor()
-	const s = parsedCommand.options.json
-		? {
-				message(_message: string) {},
-				start(_message: string) {},
-				stop(_message: string, _code?: number) {},
-			}
-		: ui.createSpinner()
+	const s =
+		parsedCommand.options.json || isCi
+			? {
+					message(_message: string) {},
+					start(_message: string) {},
+					stop(_message: string, _code?: number) {},
+				}
+			: ui.createSpinner()
 	const shouldPromptForConfigSetup =
-		!parsedCommand.options.json && parsedCommand.mode === "scan"
+		!parsedCommand.options.json && !isCi && parsedCommand.mode === "scan"
 
 	try {
 		s.start("Loading cleanup policy...")
@@ -216,19 +220,23 @@ export async function runApp() {
 			}
 		}
 
-		s.stop("Cleanup policy loaded")
+		let targetBranch = parsedCommand.options.target
+		const shouldPrune = !targetBranch
 
-		s.start("Pruning remotes...")
-		try {
-			await gitService.pruneRemotes()
-			s.stop("Remotes pruned")
-		} catch (_error) {
-			s.stop("Failed to prune remotes", 1)
+		if (shouldPrune) {
+			s.start("Pruning remotes...")
+			try {
+				await gitService.pruneRemotes()
+				s.stop("Remotes pruned")
+			} catch (_error) {
+				s.stop("Failed to prune remotes", 1)
+			}
+		} else {
+			s.stop("Cleanup policy loaded")
 		}
 
 		s.start("Scanning branches...")
 
-		let targetBranch = parsedCommand.options.target
 		let policy = loadedPolicy.policy
 
 		if (!targetBranch && policy.defaultTargetBranch) {
@@ -300,7 +308,7 @@ export async function runApp() {
 		const findings = await collectFindings(gitService, scanOptions)
 		s.stop("Scan complete")
 
-		if (scanOptions.summary || parsedCommand.options.json) {
+		if (scanOptions.summary || parsedCommand.options.json || isCi) {
 			if (scanOptions.summary) {
 				ui.showSummary(findings)
 			}
@@ -311,7 +319,10 @@ export async function runApp() {
 			if (checkPolicyViolation(findings, scanOptions)) {
 				process.exit(1)
 			}
-			return
+
+			if (scanOptions.summary || parsedCommand.options.json) {
+				return
+			}
 		}
 
 		if (findings.length === 0) {

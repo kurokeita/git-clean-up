@@ -67,6 +67,28 @@ git-clean-up clean --include branches,stashes --apply
 git-clean-up scan --target develop --age-days 14
 ```
 
+## CI / Policy Mode
+
+You can run `git-clean-up` in non-interactive environments (CI/CD) to enforce repository hygiene policies.
+
+```bash
+# Fail if any high-risk findings are detected
+git-clean-up scan --fail-on high
+
+# Fail if more than 5 cleanup opportunities exist
+git-clean-up scan --max-findings 5
+
+# Get a concise summary output instead of full finding lists
+git-clean-up scan --summary
+```
+
+### Exit Codes
+
+- `0`: Success (no policy violations found)
+- `1`: Policy Violation (findings exceeded thresholds set by `--fail-on` or `--max-findings`)
+- `2`: Usage/Config Error (invalid CLI flags or malformed config file)
+- `3`: Runtime Git Error (failed to execute git commands)
+
 ## Configuration
 
 You can customize cleanup defaults with:

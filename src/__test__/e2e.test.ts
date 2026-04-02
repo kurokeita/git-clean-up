@@ -11,17 +11,20 @@ describe("E2E", () => {
 	const remoteRepoPath = path.join(process.cwd(), "test-repo-remote.git")
 	const remoteClonePath = path.join(process.cwd(), "test-repo-remote-clone")
 	const entryPath = path.join(process.cwd(), "dist/index.js")
+	let testDir: string
 
 	const runCli = async (...args: string[]) =>
 		execa("node", [entryPath, ...args], {
 			cwd: testRepoPath,
-			env: { ...process.env, CI: "true" },
+			env: { ...process.env, CI: "true", HOME: testDir },
+			stderr: "inherit",
 		})
 
 	const runRemoteCli = async (...args: string[]) =>
 		execa("node", [entryPath, ...args], {
 			cwd: remoteClonePath,
-			env: { ...process.env, CI: "true" },
+			env: { ...process.env, CI: "true", HOME: testDir },
+			stderr: "inherit",
 		})
 
 	beforeAll(async () => {
@@ -29,6 +32,7 @@ describe("E2E", () => {
 			cwd: process.cwd(),
 		})
 
+		testDir = await fs.mkdtemp(path.join(process.cwd(), "e2e-temp-"))
 		await fs.mkdir(testRepoPath, { recursive: true })
 		const git = async (...args: string[]) =>
 			execa("git", args, { cwd: testRepoPath })
@@ -40,6 +44,11 @@ describe("E2E", () => {
 		await fs.writeFile(path.join(testRepoPath, "file.txt"), "hello")
 		await git("add", ".")
 		await git("commit", "-m", "initial commit")
+
+		await fs.writeFile(
+			path.join(testRepoPath, ".git-clean-up.json"),
+			JSON.stringify({ includeCategories: ["branch", "stash", "worktree"] }),
+		)
 
 		await git("checkout", "-b", "merged-branch")
 		await git("checkout", "main")
@@ -183,5 +192,39 @@ describe("E2E", () => {
 
 		expect(stdout).toContain('"category": "branch"')
 		expect(stdout).toContain("cleanup-branch")
+	})
+
+	it("outputs a summary in scan mode", async () => {
+		const { stdout } = await runCli(
+			"scan",
+			"--summary",
+			"--include",
+			"branches",
+			"--target",
+			"main",
+		)
+
+		expect(stdout).toContain("Scan Summary")
+		expect(stdout).toContain("Total findings:")
+	})
+
+	it("fails when thresholds are exceeded", async () => {
+		let exitCode = 0
+		try {
+			await runCli(
+				"scan",
+				"--max-findings",
+				"0",
+				"--include",
+				"branches",
+				"--target",
+				"main",
+			)
+			// Should not reach here
+			expect(true).toBe(false)
+		} catch (error: any) {
+			exitCode = error.exitCode ?? error.code ?? 1
+		}
+		expect(exitCode).toBe(1)
 	})
 })
