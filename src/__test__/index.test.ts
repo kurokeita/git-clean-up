@@ -85,6 +85,8 @@ vi.mock("../cleanup-executor", () => ({
 describe("runApp", () => {
 	beforeEach(() => {
 		vi.resetModules()
+		vi.stubEnv("CI", "")
+		vi.stubEnv("GITHUB_ACTIONS", "")
 		cliMock.program.parse.mockReset()
 		cliMock.getParsedCommand.mockReset()
 		uiMock.showWelcome.mockReset()
@@ -310,6 +312,7 @@ describe("runApp", () => {
 					includeCategories: ["branch"],
 					protectedBranches: ["main", "master", "develop", "dev"],
 					stashAgeDays: 30,
+					skipPrune: false,
 				},
 			})
 			.mockResolvedValueOnce({
@@ -324,6 +327,7 @@ describe("runApp", () => {
 					includeCategories: ["branch"],
 					protectedBranches: ["main", "master", "develop", "dev"],
 					stashAgeDays: 30,
+					skipPrune: false,
 				},
 			})
 
@@ -356,6 +360,7 @@ describe("runApp", () => {
 				includeCategories: ["branch"],
 				protectedBranches: ["main", "master", "develop", "dev"],
 				stashAgeDays: 30,
+				skipPrune: false,
 			},
 		})
 		gitServiceMock.branchRefExists.mockResolvedValue(false)
