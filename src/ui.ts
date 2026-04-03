@@ -14,7 +14,7 @@ export function formatVersionBanner() {
 }
 
 function withVersionHeader(message: string): string {
-	return `${formatVersionBanner()}\n${message}`
+	return message
 }
 
 export async function showWelcome() {
