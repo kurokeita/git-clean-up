@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { pathToFileURL } from "node:url"
+import * as p from "@clack/prompts"
 import color from "picocolors"
 import type { CleanupFinding, CleanupRisk, ScanOptions } from "./cleanup.types"
 import { CleanupExecutor } from "./cleanup-executor"
@@ -73,9 +74,18 @@ async function runInteractiveScanLoop(
 	gitService: GitService,
 	cleanupExecutor: CleanupExecutor,
 	options: ScanOptions,
+	initialFindings?: CleanupFinding[],
 ): Promise<void> {
+	let findings = initialFindings
+
 	for (;;) {
-		const findings = await collectFindings(gitService, options)
+		if (!findings) {
+			const s = p.spinner()
+			s.start("Scanning branches...")
+			findings = await collectFindings(gitService, options)
+			s.stop("Scan complete")
+		}
+
 		if (findings.length === 0) {
 			ui.showDone("Your workspace is already clean! 🎉")
 			return
@@ -90,12 +100,10 @@ async function runInteractiveScanLoop(
 		const categoryFindings = findings.filter(
 			(finding) => finding.category === selectedCategory,
 		)
-		ui.showNote(categoryFindings.map(ui.formatFindingLabel).join("\n"))
 
-		// Show all findings (including non-fixable) so user can select them
-		// User will be warned if they try to clean non-fixable ones
 		const selectedFindings = await ui.selectFindings(categoryFindings)
 		if (selectedFindings.length === 0) {
+			findings = undefined
 			continue
 		}
 
@@ -119,6 +127,7 @@ async function runInteractiveScanLoop(
 
 		const selectedAction = await ui.selectFindingAction(selectedFindings.length)
 		if (selectedAction === "back") {
+			findings = undefined
 			continue
 		}
 		if (selectedAction === "exit") {
@@ -133,18 +142,21 @@ async function runInteractiveScanLoop(
 					...commands,
 				].join("\n"),
 			)
+			findings = undefined
 			continue
 		}
 
 		const confirmed = await ui.confirmDeletion(selectedFindings.length)
 		if (!confirmed) {
+			findings = undefined
 			continue
 		}
 
-		const spinner = ui.createSpinner()
-		spinner.start("Applying cleanup actions...")
+		const s = p.spinner()
+		s.start("Applying cleanup actions...")
 		await cleanupExecutor.run(selectedFindings)
-		spinner.stop("Cleanup actions applied")
+		s.stop("Cleanup actions applied")
+		findings = undefined
 	}
 }
 
@@ -171,7 +183,7 @@ export async function runApp() {
 			const shouldUpdate = await ui.promptForUpdate(updateInfo)
 
 			if (shouldUpdate) {
-				const updateSpinner = ui.createSpinner()
+				const updateSpinner = p.spinner()
 				updateSpinner.start(`Updating ${APP_NAME}...`)
 
 				try {
@@ -182,7 +194,7 @@ export async function runApp() {
 					)
 					return
 				} catch {
-					updateSpinner.stop("Update failed", 1)
+					updateSpinner.stop("Update failed")
 					ui.showCancel(
 						`Automatic update failed. Run pnpm install -g @kurokeita/git-clean-up@latest manually.`,
 					)
@@ -195,19 +207,14 @@ export async function runApp() {
 
 	const gitService = new GitService()
 	const cleanupExecutor = new CleanupExecutor()
-	const s =
-		parsedCommand.options.json || isCi
-			? {
-					message(_message: string) {},
-					start(_message: string) {},
-					stop(_message: string, _code?: number) {},
-				}
-			: ui.createSpinner()
+	const s = p.spinner()
 	const shouldPromptForConfigSetup =
 		!parsedCommand.options.json && !isCi && parsedCommand.mode === "scan"
 
 	try {
-		s.start("Loading cleanup policy...")
+		if (!parsedCommand.options.json && !isCi) {
+			s.start("Loading cleanup policy...")
+		}
 		const repositoryRoot = await gitService.getRepositoryRoot()
 		let loadedPolicy = await loadCleanupPolicy(repositoryRoot)
 
@@ -253,18 +260,19 @@ export async function runApp() {
 			!(cliSkipPrune ?? loadedPolicy.policy.skipPrune) && !targetBranch
 
 		if (shouldPrune) {
-			s.start("Pruning remotes...")
+			if (!parsedCommand.options.json && !isCi) {
+				s.message("Pruning remotes...")
+			}
 			try {
 				await gitService.pruneRemotes()
-				s.stop("Remotes pruned")
 			} catch (_error) {
-				s.stop("Failed to prune remotes", 1)
+				// Ignore prune errors
 			}
-		} else {
-			s.stop("Cleanup policy loaded")
 		}
 
-		s.start("Scanning branches...")
+		if (!parsedCommand.options.json && !isCi) {
+			s.stop(shouldPrune ? "Remotes pruned" : "Cleanup policy loaded")
+		}
 
 		let policy = loadedPolicy.policy
 
@@ -334,8 +342,14 @@ export async function runApp() {
 			summary: parsedCommand.options.summary,
 			targetBranch,
 		}
+
+		if (!parsedCommand.options.json && !isCi) {
+			s.start("Scanning branches...")
+		}
 		const findings = await collectFindings(gitService, scanOptions)
-		s.stop("Scan complete")
+		if (!parsedCommand.options.json && !isCi) {
+			s.stop("Scan complete")
+		}
 
 		if (scanOptions.summary || parsedCommand.options.json || isCi) {
 			if (scanOptions.summary) {
@@ -360,7 +374,12 @@ export async function runApp() {
 		}
 
 		if (parsedCommand.mode === "scan") {
-			await runInteractiveScanLoop(gitService, cleanupExecutor, scanOptions)
+			await runInteractiveScanLoop(
+				gitService,
+				cleanupExecutor,
+				scanOptions,
+				findings,
+			)
 			return
 		}
 
@@ -400,7 +419,7 @@ export async function runApp() {
 			`Successfully applied ${selectedFindings.length} cleanup actions!`,
 		)
 	} catch (error) {
-		s.stop("Error during cleanup", 1)
+		s.stop("Error during cleanup")
 		if (error instanceof Error) {
 			ui.showCancel(`Error: ${error.message}`)
 		} else {
