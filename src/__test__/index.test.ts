@@ -327,7 +327,7 @@ describe("runApp", () => {
 			"feature/unpushed",
 		])
 		expect(cleanupExecutorMock.run).toHaveBeenCalledWith([branchFinding], {
-			force: true,
+			forceBranchTargets: ["feature/unpushed"],
 		})
 		expect(uiMock.showDone).toHaveBeenCalledWith(
 			"Your workspace is already clean! 🎉",
