@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import { pathToFileURL } from "node:url"
 import * as p from "@clack/prompts"
-import color from "picocolors"
 import type { CleanupFinding, CleanupRisk, ScanOptions } from "./cleanup.types"
 import { CleanupExecutor } from "./cleanup-executor"
 import { createCli } from "./cli"
@@ -107,24 +106,6 @@ async function runInteractiveScanLoop(
 			continue
 		}
 
-		// Check if any non-fixable findings were selected and warn
-		const nonFixableSelected = selectedFindings.filter((f) => !f.fixable)
-		if (nonFixableSelected.length > 0) {
-			const warningMessage = [
-				color.red(
-					"⚠ Warning: You have selected branches that cannot be automatically cleaned:",
-				),
-				"",
-				...nonFixableSelected.map(
-					(f) => `  ${color.red("✖")} ${f.title} - ${f.reason}`,
-				),
-				"",
-				"These branches have unpushed commits that would be permanently lost if deleted.",
-				"You must manually handle these branches outside of this tool.",
-			].join("\n")
-			ui.showNote(warningMessage)
-		}
-
 		const selectedAction = await ui.selectFindingAction(selectedFindings.length)
 		if (selectedAction === "back") {
 			findings = undefined
@@ -152,9 +133,26 @@ async function runInteractiveScanLoop(
 			continue
 		}
 
+		const forceDeleteBranches = selectedFindings.filter(
+			(f) => !f.fixable && f.cleanupAction.type === "delete-branch",
+		)
+		let forceBranchTargets: string[] = []
+		if (forceDeleteBranches.length > 0) {
+			const confirmedForceDelete = await ui.promptForForceDelete(
+				forceDeleteBranches.map((f) => f.title),
+			)
+			if (!confirmedForceDelete) {
+				findings = undefined
+				continue
+			}
+			forceBranchTargets = forceDeleteBranches.map(
+				(f) => f.cleanupAction.target,
+			)
+		}
+
 		const s = p.spinner()
 		s.start("Applying cleanup actions...")
-		await cleanupExecutor.run(selectedFindings)
+		await cleanupExecutor.run(selectedFindings, { forceBranchTargets })
 		s.stop("Cleanup actions applied")
 		findings = undefined
 	}

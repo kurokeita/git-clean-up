@@ -35,6 +35,7 @@ import {
 	getCategoryOptions,
 	groupFindingsByCategory,
 	promptForConfigScopeChoice,
+	promptForForceDelete,
 	promptForUpdate,
 	promptToCreateConfig,
 	promptToRepairDefaultTargetBranch,
@@ -250,5 +251,24 @@ describe("ui helpers", () => {
 		expect(promptsMock.select.mock.calls[0]?.[0].message).toContain(
 			"origin/main",
 		)
+	})
+
+	it("prompts for confirmation before force-deleting branches with unpushed commits", async () => {
+		promptsMock.confirm.mockResolvedValue(true)
+
+		const branches = ["feature/wip", "experiment/old"]
+		await expect(promptForForceDelete(branches)).resolves.toBe(true)
+		expect(promptsMock.confirm.mock.calls[0]?.[0].message).toContain(
+			"feature/wip",
+		)
+		expect(promptsMock.confirm.mock.calls[0]?.[0].message).toContain(
+			"experiment/old",
+		)
+	})
+
+	it("returns false when the user declines force-delete", async () => {
+		promptsMock.confirm.mockResolvedValue(false)
+
+		await expect(promptForForceDelete(["feature/wip"])).resolves.toBe(false)
 	})
 })

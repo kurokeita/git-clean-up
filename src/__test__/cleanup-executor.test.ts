@@ -101,4 +101,52 @@ describe(CleanupExecutor.name, () => {
 			"git stash drop stash@{0}",
 		])
 	})
+
+	it("skips non-fixable findings in run() by default", async () => {
+		await executor.run([
+			{
+				...finding("branch:feature/wip:merged"),
+				fixable: false,
+				risk: "high",
+			},
+		])
+
+		expect(execa).not.toHaveBeenCalled()
+	})
+
+	it("executes non-fixable branch deletions when the branch target is explicitly forced", async () => {
+		await executor.run(
+			[
+				{
+					...finding("branch:feature/wip:merged"),
+					cleanupAction: { target: "feature/wip", type: "delete-branch" },
+					title: "feature/wip",
+					fixable: false,
+					risk: "high",
+				},
+			],
+			{ forceBranchTargets: ["feature/wip"] },
+		)
+
+		expect(execa).toHaveBeenCalledTimes(1)
+		expect(execa).toHaveBeenCalledWith("git", ["branch", "-D", "feature/wip"])
+	})
+
+	it("does not execute non-branch non-fixable findings when force is limited to branch targets", async () => {
+		await executor.run(
+			[
+				{
+					...finding("worktree:/tmp/demo:protected-branch"),
+					category: "worktree",
+					cleanupAction: { target: "/tmp/demo", type: "remove-worktree" },
+					fixable: false,
+					risk: "high",
+					title: "/tmp/demo",
+				},
+			],
+			{ forceBranchTargets: ["feature/wip"] },
+		)
+
+		expect(execa).not.toHaveBeenCalled()
+	})
 })

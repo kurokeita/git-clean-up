@@ -28,12 +28,20 @@ export class CleanupExecutor {
 		return commands
 	}
 
-	async run(findings: CleanupFinding[]): Promise<void> {
+	async run(
+		findings: CleanupFinding[],
+		options?: { forceBranchTargets?: string[] },
+	): Promise<void> {
 		const sortedFindings = this.sortFindings(findings)
 		const seenActions = new Set<string>()
+		const forceBranchTargets = new Set(options?.forceBranchTargets ?? [])
 
 		for (const finding of sortedFindings) {
-			if (!finding.fixable) {
+			const forceDeleteBranch =
+				finding.cleanupAction.type === "delete-branch" &&
+				forceBranchTargets.has(finding.cleanupAction.target)
+
+			if (!finding.fixable && !forceDeleteBranch) {
 				continue
 			}
 
