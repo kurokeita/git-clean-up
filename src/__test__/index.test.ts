@@ -263,18 +263,17 @@ describe("runApp", () => {
 
 		gitServiceMock.getStashFindings
 			.mockResolvedValueOnce([stashFinding])
-			.mockResolvedValueOnce([stashFinding])
 			.mockResolvedValueOnce([])
-		uiMock.selectFindingCategory.mockResolvedValue("stash")
-		uiMock.selectFindings.mockResolvedValue([stashFinding])
-		uiMock.selectFindingAction.mockResolvedValue("apply")
+		uiMock.selectFindingCategory.mockResolvedValueOnce("stash")
+		uiMock.selectFindings.mockResolvedValueOnce([stashFinding])
+		uiMock.selectFindingAction.mockResolvedValueOnce("apply")
 		uiMock.confirmDeletion.mockResolvedValue(true)
 		cleanupExecutorMock.run.mockResolvedValue(undefined)
 
 		const { runApp } = await import("../index")
 		await runApp()
 
-		expect(gitServiceMock.getStashFindings).toHaveBeenCalledTimes(3)
+		expect(gitServiceMock.getStashFindings).toHaveBeenCalledTimes(2)
 		expect(cleanupExecutorMock.run).toHaveBeenCalledWith(
 			[stashFinding],
 			expect.anything(),
@@ -313,10 +312,10 @@ describe("runApp", () => {
 		gitServiceMock.getBranchFindings
 			.mockResolvedValueOnce([branchFinding])
 			.mockResolvedValueOnce([])
-		uiMock.selectFindingCategory.mockResolvedValue("branch")
-		uiMock.selectFindings.mockResolvedValue([branchFinding])
+		uiMock.selectFindingCategory.mockResolvedValueOnce("branch")
+		uiMock.selectFindings.mockResolvedValueOnce([branchFinding])
 		uiMock.promptForForceDelete.mockResolvedValue(true)
-		uiMock.selectFindingAction.mockResolvedValue("apply")
+		uiMock.selectFindingAction.mockResolvedValueOnce("apply")
 		uiMock.confirmDeletion.mockResolvedValue(true)
 		cleanupExecutorMock.run.mockResolvedValue(undefined)
 
@@ -360,10 +359,12 @@ describe("runApp", () => {
 			title: "feature/unpushed",
 		}
 
-		gitServiceMock.getBranchFindings.mockResolvedValue([branchFinding])
-		uiMock.selectFindingCategory.mockResolvedValue("branch")
-		uiMock.selectFindings.mockResolvedValue([branchFinding])
-		uiMock.selectFindingAction.mockResolvedValue("preview")
+		gitServiceMock.getBranchFindings
+			.mockResolvedValueOnce([branchFinding])
+			.mockResolvedValueOnce([])
+		uiMock.selectFindingCategory.mockResolvedValueOnce("branch")
+		uiMock.selectFindings.mockResolvedValueOnce([branchFinding])
+		uiMock.selectFindingAction.mockResolvedValueOnce("preview")
 		cleanupExecutorMock.previewCommands.mockReturnValue([])
 
 		const { runApp } = await import("../index")
