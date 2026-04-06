@@ -235,10 +235,16 @@ export async function runApp() {
 			!loadedPolicy.localConfigPath &&
 			loadedPolicy.globalConfigPath
 		) {
-			const choice = await ui.promptForConfigScopeChoice(
-				loadedPolicy.globalConfigPath,
-				getLocalConfigPath(repositoryRoot),
+			const localConfigPath = getLocalConfigPath(repositoryRoot)
+			ui.showNote(
+				ui.formatConfigScopeNote({
+					scope: "global",
+					configPath: loadedPolicy.globalConfigPath,
+					configPolicy: loadedPolicy.globalPolicy ?? {},
+					localConfigPath,
+				}),
 			)
+			const choice = await ui.promptForConfigScopeChoice(localConfigPath)
 
 			if (choice === "exit") {
 				ui.showCancel("Cleanup cancelled")
@@ -247,11 +253,21 @@ export async function runApp() {
 
 			if (choice === "local") {
 				await initializeCleanupPolicyConfig(
-					getLocalConfigPath(repositoryRoot),
+					localConfigPath,
 					loadedPolicy.policy,
 				)
 				loadedPolicy = await loadCleanupPolicy(repositoryRoot)
 			}
+		}
+
+		if (shouldPromptForConfigSetup && loadedPolicy.localConfigPath) {
+			ui.showNote(
+				ui.formatConfigScopeNote({
+					scope: "local",
+					configPath: loadedPolicy.localConfigPath,
+					configPolicy: loadedPolicy.localPolicy ?? {},
+				}),
+			)
 		}
 
 		let targetBranch = parsedCommand.options.target

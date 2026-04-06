@@ -11,6 +11,18 @@ const uiMock = vi.hoisted(() => ({
 		clear: vi.fn(),
 		isCancelled: false,
 	})),
+	formatConfigScopeNote: vi.fn(
+		({ scope, configPath, configPolicy, localConfigPath }) =>
+			[
+				`Using ${scope} config from ${configPath}.`,
+				"",
+				`Current ${scope} config:`,
+				JSON.stringify(configPolicy, null, 2),
+				...(localConfigPath
+					? ["", "Create local config at:", localConfigPath]
+					: []),
+			].join("\n"),
+	),
 	formatFindingLabel: vi.fn((finding) => finding.title),
 	promptForConfigScopeChoice: vi.fn(),
 	promptToCreateConfig: vi.fn(),
@@ -307,6 +319,10 @@ describe("runApp", () => {
 		configMock.loadCleanupPolicy
 			.mockResolvedValueOnce({
 				globalConfigPath: "/home/test/.git-clean-up.json",
+				globalPolicy: {
+					includeCategories: ["branch"],
+					stashAgeDays: 14,
+				},
 				policy: {
 					branchExcludePatterns: [],
 					branchInactiveDays: 90,
@@ -338,14 +354,79 @@ describe("runApp", () => {
 		const { runApp } = await import("../index")
 		await runApp()
 
+		expect(uiMock.showNote).toHaveBeenCalledWith(
+			expect.stringContaining(
+				"Using global config from /home/test/.git-clean-up.json.",
+			),
+		)
+		expect(uiMock.showNote).toHaveBeenCalledWith(
+			expect.stringContaining('"includeCategories"'),
+		)
+		expect(uiMock.showNote).toHaveBeenCalledWith(
+			expect.stringContaining('"branch"'),
+		)
+		expect(uiMock.showNote).toHaveBeenCalledWith(
+			expect.stringContaining('"stashAgeDays": 14'),
+		)
+		expect(uiMock.showNote).toHaveBeenCalledWith(
+			expect.stringContaining(
+				`Create local config at:\n${process.cwd()}/.git-clean-up.json`,
+			),
+		)
+		expect(uiMock.showNote).toHaveBeenCalledWith(
+			expect.stringContaining(
+				`Using local config from ${process.cwd()}/.git-clean-up.json.`,
+			),
+		)
+		expect(uiMock.showNote).toHaveBeenCalledTimes(2)
 		expect(uiMock.promptForConfigScopeChoice).toHaveBeenCalledWith(
-			"/home/test/.git-clean-up.json",
 			`${process.cwd()}/.git-clean-up.json`,
 		)
 		expect(configMock.initializeCleanupPolicyConfig).toHaveBeenCalledWith(
 			`${process.cwd()}/.git-clean-up.json`,
 			expect.any(Object),
 		)
+	})
+
+	it("shows local config details when a local config exists", async () => {
+		configMock.loadCleanupPolicy.mockResolvedValue({
+			globalConfigPath: "/home/test/.git-clean-up.json",
+			localConfigPath: `${process.cwd()}/.git-clean-up.json`,
+			localPolicy: {
+				includeCategories: ["worktree"],
+				stashAgeDays: 7,
+			},
+			policy: {
+				branchExcludePatterns: [],
+				branchInactiveDays: 90,
+				defaultTargetBranch: undefined,
+				divergedAheadCount: 10,
+				divergedBehindCount: 10,
+				includeCategories: ["worktree"],
+				protectedBranches: ["main", "master", "develop", "dev"],
+				stashAgeDays: 7,
+				skipPrune: false,
+			},
+		})
+
+		const { runApp } = await import("../index")
+		await runApp()
+
+		expect(uiMock.showNote).toHaveBeenCalledWith(
+			expect.stringContaining(
+				`Using local config from ${process.cwd()}/.git-clean-up.json.`,
+			),
+		)
+		expect(uiMock.showNote).toHaveBeenCalledWith(
+			expect.stringContaining('"includeCategories"'),
+		)
+		expect(uiMock.showNote).toHaveBeenCalledWith(
+			expect.stringContaining('"worktree"'),
+		)
+		expect(uiMock.showNote).toHaveBeenCalledWith(
+			expect.stringContaining('"stashAgeDays": 7'),
+		)
+		expect(uiMock.promptForConfigScopeChoice).not.toHaveBeenCalled()
 	})
 
 	it("repairs an invalid configured default target branch by using the detected default", async () => {

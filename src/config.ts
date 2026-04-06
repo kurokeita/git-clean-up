@@ -51,6 +51,8 @@ export interface LoadedCleanupPolicy {
 	localConfigPath?: string
 	/** Absolute path to the global config file, if present. */
 	globalConfigPath?: string
+	globalPolicy?: CleanupPolicy
+	localPolicy?: CleanupPolicy
 	/** Config path that supplied defaultTargetBranch, if any. */
 	defaultTargetBranchSourcePath?: string
 	/** The resolved policy with all fields populated. */
@@ -372,7 +374,9 @@ export async function loadCleanupPolicy(
 				: undefined,
 		defaultTargetBranchSourcePath,
 		globalConfigPath: hasGlobalConfig ? globalConfigPath : undefined,
+		globalPolicy: hasGlobalConfig ? globalPolicy : undefined,
 		localConfigPath: hasLocalConfig ? localConfigPath : undefined,
+		localPolicy: hasLocalConfig ? localPolicy : undefined,
 		policy: mergedPolicy,
 	}
 }

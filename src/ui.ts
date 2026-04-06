@@ -1,6 +1,10 @@
 import * as p from "@clack/prompts"
 import color from "picocolors"
-import type { CleanupCategory, CleanupFinding } from "./cleanup.types"
+import type {
+	CleanupCategory,
+	CleanupFinding,
+	CleanupPolicy,
+} from "./cleanup.types"
 import { APP_NAME, getVersion, type UpdateInfo } from "./version"
 
 export interface GroupedFindings {
@@ -59,16 +63,13 @@ export async function promptToCreateConfig(
 
 /** Prompts whether to keep using the global config or create a local one. */
 export async function promptForConfigScopeChoice(
-	globalConfigPath: string,
 	localConfigPath: string,
 ): Promise<"global" | "local" | "exit"> {
 	const selectedAction = await p.select({
-		message: withVersionHeader(
-			`Using global config at ${globalConfigPath}. Keep using it or create a local config at ${localConfigPath}?`,
-		),
+		message: withVersionHeader("Config scope"),
 		options: [
 			{ label: "Keep using global config", value: "global" },
-			{ label: "Create local config", value: "local" },
+			{ label: `Create local config at ${localConfigPath}`, value: "local" },
 			{ label: "Exit", value: "exit" },
 		],
 	})
@@ -78,6 +79,28 @@ export async function promptForConfigScopeChoice(
 	}
 
 	return selectedAction as "global" | "local" | "exit"
+}
+
+export function formatConfigScopeNote({
+	scope,
+	configPath,
+	configPolicy,
+	localConfigPath,
+}: {
+	scope: "global" | "local"
+	configPath: string
+	configPolicy: CleanupPolicy
+	localConfigPath?: string
+}): string {
+	return [
+		`Using ${scope} config from ${configPath}.`,
+		"",
+		`Current ${scope} config:`,
+		JSON.stringify(configPolicy, null, 2),
+		...(localConfigPath
+			? ["", "Create local config at:", localConfigPath]
+			: []),
+	].join("\n")
 }
 
 /** Prompts how to repair an invalid configured defaultTargetBranch. */

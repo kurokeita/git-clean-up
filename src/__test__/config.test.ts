@@ -76,6 +76,10 @@ describe("config", () => {
 		const loaded = await loadCleanupPolicy(directory, homeDirectory)
 
 		expect(loaded.globalConfigPath).toBe(join(homeDirectory, CONFIG_FILE_NAME))
+		expect(loaded.globalPolicy).toEqual({
+			defaultTargetBranch: "origin/main",
+			divergedAheadCount: 6,
+		})
 		expect(loaded.localConfigPath).toBeUndefined()
 		expect(loaded.defaultTargetBranchSourcePath).toBe(
 			join(homeDirectory, CONFIG_FILE_NAME),
