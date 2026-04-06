@@ -117,6 +117,24 @@ export function formatConfigScopeNote({
 	].join("\n")
 }
 
+export async function promptForForceDelete(
+	branches: string[],
+): Promise<boolean> {
+	const branchList = branches.map((b) => `  - ${b}`).join("\n")
+	const confirmed = await p.confirm({
+		message: withVersionHeader(
+			`These branches have unpushed commits and will be permanently deleted:\n${branchList}\n\nForce delete?`,
+		),
+		initialValue: false,
+	})
+
+	if (p.isCancel(confirmed)) {
+		return false
+	}
+
+	return confirmed as boolean
+}
+
 /** Prompts how to repair an invalid configured defaultTargetBranch. */
 export async function promptToRepairDefaultTargetBranch({
 	configPath,

@@ -32,6 +32,7 @@ const uiMock = vi.hoisted(() => ({
 	),
 	formatFindingLabel: vi.fn((finding) => finding.title),
 	promptForConfigScopeChoice: vi.fn(),
+	promptForForceDelete: vi.fn().mockResolvedValue(false),
 	promptToCreateConfig: vi.fn(),
 	promptToRepairDefaultTargetBranch: vi.fn(),
 	promptForUpdate: vi.fn(),
@@ -118,6 +119,8 @@ describe("runApp", () => {
 		uiMock.showNote.mockReset()
 		uiMock.promptForUpdate.mockReset()
 		uiMock.promptForConfigScopeChoice.mockReset()
+		uiMock.promptForForceDelete.mockReset()
+		uiMock.promptForForceDelete.mockResolvedValue(false)
 		uiMock.promptToCreateConfig.mockReset()
 		uiMock.promptToRepairDefaultTargetBranch.mockReset()
 		uiMock.createSpinner.mockClear()
@@ -260,22 +263,115 @@ describe("runApp", () => {
 
 		gitServiceMock.getStashFindings
 			.mockResolvedValueOnce([stashFinding])
-			.mockResolvedValueOnce([stashFinding])
 			.mockResolvedValueOnce([])
-		uiMock.selectFindingCategory.mockResolvedValue("stash")
-		uiMock.selectFindings.mockResolvedValue([stashFinding])
-		uiMock.selectFindingAction.mockResolvedValue("apply")
+		uiMock.selectFindingCategory.mockResolvedValueOnce("stash")
+		uiMock.selectFindings.mockResolvedValueOnce([stashFinding])
+		uiMock.selectFindingAction.mockResolvedValueOnce("apply")
 		uiMock.confirmDeletion.mockResolvedValue(true)
 		cleanupExecutorMock.run.mockResolvedValue(undefined)
 
 		const { runApp } = await import("../index")
 		await runApp()
 
-		expect(gitServiceMock.getStashFindings).toHaveBeenCalledTimes(3)
-		expect(cleanupExecutorMock.run).toHaveBeenCalledWith([stashFinding])
+		expect(gitServiceMock.getStashFindings).toHaveBeenCalledTimes(2)
+		expect(cleanupExecutorMock.run).toHaveBeenCalledWith(
+			[stashFinding],
+			expect.anything(),
+		)
 		expect(uiMock.showDone).toHaveBeenCalledWith(
 			"Your workspace is already clean! 🎉",
 		)
+	})
+
+	it("force-deletes selected branches with unpushed commits after confirmation", async () => {
+		cliMock.getParsedCommand.mockReturnValue({
+			mode: "scan",
+			options: {
+				ageDays: 30,
+				all: false,
+				apply: false,
+				include: ["branch"],
+				json: false,
+				target: undefined,
+			},
+		})
+
+		const branchFinding = {
+			category: "branch" as const,
+			cleanupAction: {
+				target: "feature/unpushed",
+				type: "delete-branch" as const,
+			},
+			fixable: false,
+			id: "branch:feature/unpushed:merged",
+			reason: "Merged into main",
+			risk: "high" as const,
+			title: "feature/unpushed",
+		}
+
+		gitServiceMock.getBranchFindings
+			.mockResolvedValueOnce([branchFinding])
+			.mockResolvedValueOnce([])
+		uiMock.selectFindingCategory.mockResolvedValueOnce("branch")
+		uiMock.selectFindings.mockResolvedValueOnce([branchFinding])
+		uiMock.promptForForceDelete.mockResolvedValue(true)
+		uiMock.selectFindingAction.mockResolvedValueOnce("apply")
+		uiMock.confirmDeletion.mockResolvedValue(true)
+		cleanupExecutorMock.run.mockResolvedValue(undefined)
+
+		const { runApp } = await import("../index")
+		await runApp()
+
+		expect(uiMock.promptForForceDelete).toHaveBeenCalledWith([
+			"feature/unpushed",
+		])
+		expect(cleanupExecutorMock.run).toHaveBeenCalledWith([branchFinding], {
+			forceBranchTargets: ["feature/unpushed"],
+		})
+		expect(uiMock.showDone).toHaveBeenCalledWith(
+			"Your workspace is already clean! 🎉",
+		)
+	})
+
+	it("does not prompt for force-delete when the user previews non-fixable branch findings", async () => {
+		cliMock.getParsedCommand.mockReturnValue({
+			mode: "scan",
+			options: {
+				ageDays: 30,
+				all: false,
+				apply: false,
+				include: ["branch"],
+				json: false,
+				target: undefined,
+			},
+		})
+
+		const branchFinding = {
+			category: "branch" as const,
+			cleanupAction: {
+				target: "feature/unpushed",
+				type: "delete-branch" as const,
+			},
+			fixable: false,
+			id: "branch:feature/unpushed:merged",
+			reason: "Merged into main",
+			risk: "high" as const,
+			title: "feature/unpushed",
+		}
+
+		gitServiceMock.getBranchFindings
+			.mockResolvedValueOnce([branchFinding])
+			.mockResolvedValueOnce([])
+		uiMock.selectFindingCategory.mockResolvedValueOnce("branch")
+		uiMock.selectFindings.mockResolvedValueOnce([branchFinding])
+		uiMock.selectFindingAction.mockResolvedValueOnce("preview")
+		cleanupExecutorMock.previewCommands.mockReturnValue([])
+
+		const { runApp } = await import("../index")
+		await runApp()
+
+		expect(uiMock.promptForForceDelete).not.toHaveBeenCalled()
+		expect(cleanupExecutorMock.run).not.toHaveBeenCalled()
 	})
 
 	it("prompts to initialize a global config when no config files exist", async () => {
