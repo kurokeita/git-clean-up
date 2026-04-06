@@ -17,7 +17,14 @@ const uiMock = vi.hoisted(() => ({
 				`Using ${scope} config from ${configPath}.`,
 				"",
 				`Current ${scope} config:`,
-				JSON.stringify(configPolicy, null, 2),
+				...Object.entries(configPolicy).map(([key, value]) => {
+					const formattedValue = Array.isArray(value)
+						? value.join(", ")
+						: typeof value === "string"
+							? value
+							: String(value)
+					return `- ${key}: ${formattedValue}`
+				}),
 				...(localConfigPath
 					? ["", "Create local config at:", localConfigPath]
 					: []),
@@ -360,13 +367,13 @@ describe("runApp", () => {
 			),
 		)
 		expect(uiMock.showNote).toHaveBeenCalledWith(
-			expect.stringContaining('"includeCategories"'),
+			expect.stringContaining("- includeCategories: branch"),
 		)
 		expect(uiMock.showNote).toHaveBeenCalledWith(
-			expect.stringContaining('"branch"'),
+			expect.not.stringContaining('"includeCategories"'),
 		)
 		expect(uiMock.showNote).toHaveBeenCalledWith(
-			expect.stringContaining('"stashAgeDays": 14'),
+			expect.stringContaining("- stashAgeDays: 14"),
 		)
 		expect(uiMock.showNote).toHaveBeenCalledWith(
 			expect.stringContaining(
@@ -418,13 +425,13 @@ describe("runApp", () => {
 			),
 		)
 		expect(uiMock.showNote).toHaveBeenCalledWith(
-			expect.stringContaining('"includeCategories"'),
+			expect.stringContaining("- includeCategories: worktree"),
 		)
 		expect(uiMock.showNote).toHaveBeenCalledWith(
-			expect.stringContaining('"worktree"'),
+			expect.not.stringContaining('"stashAgeDays"'),
 		)
 		expect(uiMock.showNote).toHaveBeenCalledWith(
-			expect.stringContaining('"stashAgeDays": 7'),
+			expect.stringContaining("- stashAgeDays: 7"),
 		)
 		expect(uiMock.promptForConfigScopeChoice).not.toHaveBeenCalled()
 	})

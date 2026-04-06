@@ -92,11 +92,25 @@ export function formatConfigScopeNote({
 	configPolicy: CleanupPolicy
 	localConfigPath?: string
 }): string {
+	const formattedConfigEntries = Object.entries(configPolicy).map(
+		([key, value]) => {
+			const formattedValue = Array.isArray(value)
+				? value.join(", ")
+				: typeof value === "string"
+					? value
+					: String(value)
+
+			return `- ${key}: ${formattedValue}`
+		},
+	)
+
 	return [
 		`Using ${scope} config from ${configPath}.`,
 		"",
 		`Current ${scope} config:`,
-		JSON.stringify(configPolicy, null, 2),
+		...(formattedConfigEntries.length > 0
+			? formattedConfigEntries
+			: ["- No overrides set in this scope"]),
 		...(localConfigPath
 			? ["", "Create local config at:", localConfigPath]
 			: []),
