@@ -29,6 +29,7 @@ vi.mock("@clack/prompts", () => ({
 }))
 
 import {
+	formatConfigScopeNote,
 	formatFindingLabel,
 	formatVersionBanner,
 	getCategoryOptions,
@@ -180,17 +181,57 @@ describe("ui helpers", () => {
 		promptsMock.select.mockResolvedValue("local")
 
 		await expect(
-			promptForConfigScopeChoice(
-				"/home/test/.git-clean-up.json",
-				"/repo/.git-clean-up.json",
-			),
+			promptForConfigScopeChoice("/repo/.git-clean-up.json"),
 		).resolves.toBe("local")
-		expect(promptsMock.select.mock.calls[0]?.[0].message).toContain(
-			"/home/test/.git-clean-up.json",
+		expect(promptsMock.select.mock.calls[0]?.[0].message).toBe("Config scope")
+		expect(promptsMock.select.mock.calls[0]?.[0].options).toEqual([
+			{ label: "Keep using global config", value: "global" },
+			{
+				label: "Create local config at /repo/.git-clean-up.json",
+				value: "local",
+			},
+			{ label: "Exit", value: "exit" },
+		])
+	})
+
+	it("formats a global config note as a compact summary instead of raw json", () => {
+		const note = formatConfigScopeNote({
+			scope: "global",
+			configPath: "/home/test/.git-clean-up.json",
+			configPolicy: {
+				includeCategories: ["branch", "worktree"],
+				stashAgeDays: 14,
+			},
+			localConfigPath: "/repo/.git-clean-up.json",
+		})
+
+		expect(note).toContain(
+			"Using global config from /home/test/.git-clean-up.json.",
 		)
-		expect(promptsMock.select.mock.calls[0]?.[0].message).toContain(
-			"/repo/.git-clean-up.json",
-		)
+		expect(note).toContain("Current global config:")
+		expect(note).toContain("- includeCategories: branch, worktree")
+		expect(note).toContain("- stashAgeDays: 14")
+		expect(note).toContain("Create local config at:\n/repo/.git-clean-up.json")
+		expect(note).not.toContain("{")
+		expect(note).not.toContain('"includeCategories"')
+	})
+
+	it("formats a local config note as a compact summary instead of raw json", () => {
+		const note = formatConfigScopeNote({
+			scope: "local",
+			configPath: "/repo/.git-clean-up.json",
+			configPolicy: {
+				defaultTargetBranch: "origin/main",
+				stashAgeDays: 7,
+			},
+		})
+
+		expect(note).toContain("Using local config from /repo/.git-clean-up.json.")
+		expect(note).toContain("Current local config:")
+		expect(note).toContain("- defaultTargetBranch: origin/main")
+		expect(note).toContain("- stashAgeDays: 7")
+		expect(note).not.toContain("{")
+		expect(note).not.toContain('"stashAgeDays"')
 	})
 
 	it("prompts to repair an invalid configured target branch", async () => {
