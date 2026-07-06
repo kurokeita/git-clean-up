@@ -10,7 +10,7 @@
 		"dev": "tsx src/index.ts",
 		"build": "tsup src/index.ts --format esm --clean --dts",
 		"install:global": "pnpm run build && pnpm link --global",
-		"uninstall:global": "pnpm remove -g git-clean-up",
+		"uninstall:global": "pnpm remove -g @kurokeita/git-clean-up",
 		"test": "vitest run",
 		"test:watch": "vitest",
 		"lint": "biome check --error-on-warnings .",

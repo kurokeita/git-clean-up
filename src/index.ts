@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { realpathSync } from "node:fs"
 import { pathToFileURL } from "node:url"
 import * as p from "@clack/prompts"
 import type { CleanupFinding, CleanupRisk, ScanOptions } from "./cleanup.types"
@@ -445,7 +446,7 @@ export async function runApp() {
 
 if (
 	process.argv[1] &&
-	import.meta.url === pathToFileURL(process.argv[1]).href
+	import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href
 ) {
 	runApp()
 		.then(() => {
